@@ -3,8 +3,8 @@
  * In Databricks Apps, uses the service principal's OAuth token.
  */
 
-const WAREHOUSE_ID = process.env.DATABRICKS_WAREHOUSE_ID || '87e069097741b56c';
-const SCHEMA = process.env.UC_SCHEMA || 'oil_pump_monitor_catalog.production_optimizer';
+const WAREHOUSE_ID = process.env.DATABRICKS_WAREHOUSE_ID || '';
+const SCHEMA = process.env.UC_SCHEMA || '';
 
 let _cachedToken: string | null = null;
 let _tokenExpiry = 0;

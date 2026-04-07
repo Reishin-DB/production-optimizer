@@ -8,10 +8,34 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const provider_1 = require("../twin/provider");
+const sql_1 = require("../databricks/sql");
 const decline_1 = require("../physics/decline");
 const darcy_1 = require("../physics/darcy");
 const router = (0, express_1.Router)();
 const provider = new provider_1.InMemoryTwinDataProvider();
+const DATABRICKS_AVAILABLE = (0, sql_1.isDatabricksAvailable)();
+let databricksWorking = false; // tracks if DB queries actually succeed
+if (DATABRICKS_AVAILABLE)
+    console.log('Databricks detected — will attempt Unity Catalog tables');
+else
+    console.log('No Databricks credentials — using in-memory mock data');
+/** Try Databricks, fall back to mock on any failure */
+async function tryDatabricks(dbFn, mockFn) {
+    if (DATABRICKS_AVAILABLE) {
+        try {
+            const result = await dbFn();
+            if (!databricksWorking) {
+                databricksWorking = true;
+                console.log('Databricks SQL queries working — using live data');
+            }
+            return result;
+        }
+        catch (err) {
+            console.warn('Databricks query failed, falling back to mock:', err?.message || err);
+        }
+    }
+    return mockFn();
+}
 // Cache decline curves (expensive to compute)
 let declineCurveCache = null;
 let cacheTimestamp = 0;
@@ -80,6 +104,132 @@ router.get('/decline-curves', async (_req, res) => {
     catch (err) {
         console.error('Decline curve error:', err);
         res.status(500).json({ error: 'Failed to compute decline curves' });
+    }
+});
+/**
+ * GET /api/production/well-analytics
+ *
+ * Full multi-stream analytics for all producer wells:
+ * oil, gas, water, pressures, CO2 concentration, water cut, GOR,
+ * health scores, trends, and performance vs model.
+ */
+let analyticsCache = null;
+let analyticsCacheTs = 0;
+router.get('/well-analytics', async (_req, res) => {
+    const now = Date.now();
+    if (analyticsCache && now - analyticsCacheTs < CACHE_TTL) {
+        return res.json(analyticsCache);
+    }
+    try {
+        let results;
+        let usedDatabricks = false;
+        if (DATABRICKS_AVAILABLE) {
+            try {
+                // Query production history from Databricks
+                const wells = await (0, sql_1.executeQuery)(`SELECT * FROM ${(0, sql_1.table)('bronze_wells')} WHERE well_type = 'producer'`);
+                const historyRows = await (0, sql_1.executeQuery)(`SELECT * FROM ${(0, sql_1.table)('silver_production_history')} ORDER BY well_id, month`);
+                // Group history by well
+                const histByWell = {};
+                for (const r of historyRows) {
+                    const wid = r.well_id;
+                    if (!histByWell[wid])
+                        histByWell[wid] = [];
+                    histByWell[wid].push(r);
+                }
+                results = wells.map((well) => {
+                    const hist = histByWell[well.well_id] || [];
+                    const monthsOn = hist.length > 0 ? hist.length - 1 : 24;
+                    // Fit Arps to actual Databricks data
+                    const histForFit = hist.map((h) => ({ month: h.month, rate: h.oil_rate }));
+                    const fit = (0, decline_1.fitDeclineCurve)(histForFit);
+                    const eur = (0, decline_1.calculateEUR)(fit.params, 5);
+                    const lastActual = hist.length > 0 ? hist[hist.length - 1].oil_rate : well.oil_rate;
+                    const lastPredicted = (0, decline_1.arpsRate)(fit.params, monthsOn);
+                    const gap = lastActual - lastPredicted;
+                    // Trends from last 3 vs prior 3
+                    const recent3 = hist.slice(-3);
+                    const prior3 = hist.slice(-6, -3);
+                    const avg = (arr, key) => arr.length ? arr.reduce((s, r) => s + (r[key] || 0), 0) / arr.length : 0;
+                    const trend = (recent, prior, threshold) => recent > prior + threshold ? 'rising' : recent < prior - threshold ? 'falling' : 'stable';
+                    // Health score
+                    let health = 100;
+                    if (gap < 0)
+                        health -= Math.min(30, Math.abs(gap) / lastPredicted * 100);
+                    if (well.water_cut > 0.7)
+                        health -= 20;
+                    else if (well.water_cut > 0.5)
+                        health -= 10;
+                    if (well.co2_concentration > 15)
+                        health -= 15;
+                    else if (well.co2_concentration > 8)
+                        health -= 5;
+                    health = Math.max(0, Math.min(100, Math.round(health)));
+                    // Map DB rows to analytics points
+                    const history = hist.map((h) => ({
+                        month: h.month, date: h.production_date,
+                        oilRate: h.oil_rate, oilPredicted: (0, decline_1.arpsRate)(fit.params, h.month),
+                        gasRate: h.gas_rate, waterRate: h.water_rate,
+                        waterCut: h.water_cut, gor: h.gor,
+                        co2Concentration: h.co2_concentration,
+                        tubingPressure: h.tubing_pressure, casingPressure: h.casing_pressure, bhp: h.bhp,
+                        cumOil: h.cum_oil, cumGas: h.cum_gas, cumWater: h.cum_water,
+                    }));
+                    // 24-month forecast
+                    const forecast = [];
+                    let cumOil = hist.length > 0 ? hist[hist.length - 1].cum_oil : 0;
+                    for (let m = 1; m <= 24; m++) {
+                        const ft = monthsOn + m;
+                        const oilPredicted = (0, decline_1.arpsRate)(fit.params, ft);
+                        cumOil += oilPredicted * 30.44;
+                        const date = new Date();
+                        date.setMonth(date.getMonth() + m);
+                        forecast.push({
+                            month: ft, date: date.toISOString().slice(0, 10),
+                            oilRate: 0, oilPredicted: Math.round(oilPredicted * 10) / 10,
+                            gasRate: 0, waterRate: 0, waterCut: 0, gor: 0, co2Concentration: 0,
+                            tubingPressure: 0, casingPressure: 0, bhp: 0,
+                            cumOil: Math.round(cumOil), cumGas: 0, cumWater: 0,
+                        });
+                    }
+                    const cumProd = hist.length > 0 ? hist[hist.length - 1].cum_oil : 0;
+                    return {
+                        wellId: well.well_id, wellName: well.well_name,
+                        declineParams: fit.params, declineType: fit.declineType,
+                        r2: Math.round(fit.r2 * 1000) / 1000,
+                        eur, remainingReserves: Math.max(0, eur - cumProd),
+                        currentRate: lastActual, expectedRate: Math.round(lastPredicted * 10) / 10,
+                        performanceGap: Math.round(gap * 10) / 10,
+                        healthScore: health,
+                        waterCutTrend: trend(avg(recent3, 'water_cut'), avg(prior3, 'water_cut'), 0.02),
+                        co2Trend: trend(avg(recent3, 'co2_concentration'), avg(prior3, 'co2_concentration'), 1),
+                        pressureTrend: trend(avg(recent3, 'bhp'), avg(prior3, 'bhp'), 10),
+                        history, forecast,
+                    };
+                });
+                usedDatabricks = true;
+            }
+            catch (dbErr) {
+                console.warn('Databricks well-analytics failed, using mock:', dbErr?.message);
+            }
+        }
+        if (!usedDatabricks) {
+            // Fallback: mock data
+            const state = await provider.loadState();
+            const producers = state.wells.filter((w) => w.type === 'producer');
+            results = producers.map((well, idx) => {
+                const monthsOn = 24 + (idx * 3);
+                const seed = well.id.charCodeAt(2) * 1000 + well.id.charCodeAt(3);
+                return (0, decline_1.generateWellAnalytics)(well.id, well.name, well, monthsOn, seed);
+            });
+        }
+        results.sort((a, b) => a.performanceGap - b.performanceGap);
+        analyticsCache = results;
+        analyticsCacheTs = now;
+        res.json(results);
+    }
+    catch (err) {
+        console.error('Well analytics error:', err);
+        res.status(500).json({ error: 'Failed to compute well analytics' });
     }
 });
 /**
@@ -204,7 +354,44 @@ router.get('/reservoir-status', async (_req, res) => {
  */
 router.get('/recommendations', async (_req, res) => {
     try {
-        const state = await provider.loadState();
+        let state;
+        if (DATABRICKS_AVAILABLE) {
+            try {
+                // Build state from Databricks tables
+                const wells = await (0, sql_1.executeQuery)(`SELECT * FROM ${(0, sql_1.table)('bronze_wells')}`);
+                const patterns = await (0, sql_1.executeQuery)(`SELECT * FROM ${(0, sql_1.table)('bronze_patterns')}`);
+                state = {
+                    wells: wells.map((w) => ({
+                        id: w.well_id, name: w.well_name, type: w.well_type, status: w.status,
+                        patternId: w.pattern_id, padId: w.pad_id,
+                        oilRate: w.oil_rate, gasRate: w.gas_rate, waterRate: w.water_rate,
+                        co2InjRate: w.co2_inj_rate, waterInjRate: w.water_inj_rate,
+                        chokePercent: w.choke_percent, tubingPressure: w.tubing_pressure,
+                        casingPressure: w.casing_pressure, bottomholePressure: w.bottomhole_pressure,
+                        co2Concentration: w.co2_concentration, gor: w.gor, waterCut: w.water_cut,
+                    })),
+                    patterns: patterns.map((p) => ({
+                        id: p.pattern_id, name: p.pattern_name, type: p.pattern_type,
+                        currentPhase: p.current_phase, cycleNumber: p.cycle_number,
+                        targetPressure: p.target_pressure, currentPressure: p.current_pressure,
+                        co2Slug: p.co2_slug, waterSlug: p.water_slug,
+                        producerIds: [], injectorIds: [], monitorIds: [],
+                    })),
+                };
+                // Link wells to patterns
+                for (const p of state.patterns) {
+                    p.producerIds = state.wells.filter((w) => w.patternId === p.id && w.type === 'producer').map((w) => w.id);
+                    p.injectorIds = state.wells.filter((w) => w.patternId === p.id && (w.type === 'injector' || w.type === 'WAG')).map((w) => w.id);
+                }
+            }
+            catch (dbErr) {
+                console.warn('Databricks recommendations failed, using mock:', dbErr?.message);
+                state = await provider.loadState();
+            }
+        }
+        else {
+            state = await provider.loadState();
+        }
         const recommendations = [];
         // Analyze each pattern for optimization opportunities
         for (const pattern of state.patterns) {

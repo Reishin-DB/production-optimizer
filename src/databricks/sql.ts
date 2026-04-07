@@ -31,7 +31,7 @@ async function getToken(): Promise<string> {
     const resp = await fetch(`${host}/oidc/v1/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'grant_type=client_credentials&scope=all-apis',
+      body: `grant_type=client_credentials&scope=all-apis&client_id=${process.env.DATABRICKS_CLIENT_ID || ''}&client_secret=${process.env.DATABRICKS_CLIENT_SECRET || ''}`,
     });
     if (resp.ok) {
       const data = await resp.json();

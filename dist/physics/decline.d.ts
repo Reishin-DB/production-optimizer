@@ -54,6 +54,56 @@ export declare function fitDeclineCurve(history: Array<{
  * This creates physics-based synthetic data (not random — follows real decline behavior).
  */
 export declare function generateProductionHistory(wellId: string, wellName: string, currentRate: number, monthsOnProduction: number, seed: number): DeclinePoint[];
+export interface WellAnalyticsPoint {
+    month: number;
+    date: string;
+    oilRate: number;
+    oilPredicted: number;
+    gasRate: number;
+    waterRate: number;
+    waterCut: number;
+    gor: number;
+    co2Concentration: number;
+    tubingPressure: number;
+    casingPressure: number;
+    bhp: number;
+    cumOil: number;
+    cumGas: number;
+    cumWater: number;
+}
+export interface WellAnalytics {
+    wellId: string;
+    wellName: string;
+    declineParams: DeclineParams;
+    declineType: 'exponential' | 'hyperbolic' | 'harmonic';
+    r2: number;
+    eur: number;
+    remainingReserves: number;
+    currentRate: number;
+    expectedRate: number;
+    performanceGap: number;
+    healthScore: number;
+    waterCutTrend: 'rising' | 'stable' | 'falling';
+    co2Trend: 'rising' | 'stable' | 'falling';
+    pressureTrend: 'rising' | 'stable' | 'falling';
+    history: WellAnalyticsPoint[];
+    forecast: WellAnalyticsPoint[];
+}
+/**
+ * Generate comprehensive well analytics with all production streams.
+ * Physics-based: oil follows Arps, gas/water/pressure follow correlated models.
+ */
+export declare function generateWellAnalytics(wellId: string, wellName: string, well: {
+    oilRate: number;
+    gasRate: number;
+    waterRate: number;
+    waterCut: number;
+    gor: number;
+    co2Concentration: number;
+    tubingPressure: number;
+    casingPressure: number;
+    bottomholePressure: number;
+}, monthsOnProduction: number, seed: number): WellAnalytics;
 /**
  * Calculate EUR (Estimated Ultimate Recovery) to economic limit.
  */

@@ -15,6 +15,7 @@ exports.arpsCumulative = arpsCumulative;
 exports.effectiveDeclineRate = effectiveDeclineRate;
 exports.fitDeclineCurve = fitDeclineCurve;
 exports.generateProductionHistory = generateProductionHistory;
+exports.generateWellAnalytics = generateWellAnalytics;
 exports.calculateEUR = calculateEUR;
 /** Evaluate Arps equation at time t (months) */
 function arpsRate(params, t) {
@@ -177,6 +178,145 @@ function generateProductionHistory(wellId, wellName, currentRate, monthsOnProduc
         });
     }
     return history;
+}
+/**
+ * Generate comprehensive well analytics with all production streams.
+ * Physics-based: oil follows Arps, gas/water/pressure follow correlated models.
+ */
+function generateWellAnalytics(wellId, wellName, well, monthsOnProduction, seed) {
+    const rng = seededRandom(seed);
+    // Arps parameters for oil
+    const b = 0.3 + rng() * 0.4; // 0.3-0.7 (realistic CO2-EOR)
+    const Di = 0.01 + rng() * 0.03; // 1-4% monthly (10-35% annual)
+    const qi = well.oilRate * Math.pow(1 + b * Di * monthsOnProduction, 1 / b);
+    const params = { qi, Di, b };
+    // Initial conditions (back-calculated)
+    const initialGOR = well.gor * 0.6; // GOR increases over time
+    const initialWaterCut = Math.max(0.05, well.waterCut * 0.3); // water cut rises
+    const initialCO2 = Math.max(0.5, well.co2Concentration * 0.1); // CO2 starts low
+    const initialTP = well.tubingPressure * 1.3; // pressure declines
+    const initialCP = well.casingPressure * 1.2;
+    const initialBHP = well.bottomholePressure * 1.15;
+    const history = [];
+    let cumOil = 0, cumGas = 0, cumWater = 0;
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - monthsOnProduction);
+    for (let m = 0; m <= monthsOnProduction; m++) {
+        const t = m / monthsOnProduction; // 0 to 1 normalized time
+        // Oil: Arps + noise + CO2 flood response
+        const oilPredicted = arpsRate(params, m);
+        const floodResponse = t > 0.3 && t < 0.7
+            ? 1 + 0.12 * Math.sin(Math.PI * (t - 0.3) / 0.4)
+            : 1;
+        const oilRate = Math.max(5, oilPredicted * (1 + (rng() - 0.5) * 0.1) * floodResponse);
+        // GOR: increases as reservoir depletes (solution gas liberation)
+        const gor = initialGOR + (well.gor - initialGOR) * Math.pow(t, 0.8) + (rng() - 0.5) * 30;
+        // Gas: GOR × oil rate
+        const gasRate = oilRate * Math.max(100, gor) / 1000; // mcf/d
+        // Water cut: S-curve increase (Buckley-Leverett inspired)
+        const wcBase = initialWaterCut + (well.waterCut - initialWaterCut) / (1 + Math.exp(-8 * (t - 0.5)));
+        const waterCut = Math.min(0.95, Math.max(0, wcBase + (rng() - 0.5) * 0.03));
+        // Water rate: from water cut and total liquid
+        const waterRate = oilRate * waterCut / (1 - waterCut);
+        // CO2 concentration: rises after breakthrough (~40% of well life)
+        const co2Base = t < 0.35 ? initialCO2 * (1 + t)
+            : initialCO2 + (well.co2Concentration - initialCO2) * Math.pow((t - 0.35) / 0.65, 1.5);
+        const co2Concentration = Math.min(80, Math.max(0, co2Base + (rng() - 0.5) * 1.5));
+        // Pressures: gradual decline with depletion
+        const pDecay = 1 - t * 0.25; // 25% decline over well life
+        const tubingPressure = Math.max(100, initialTP * pDecay + (rng() - 0.5) * 20);
+        const casingPressure = Math.max(200, initialCP * pDecay + (rng() - 0.5) * 15);
+        const bhp = Math.max(500, initialBHP * (1 - t * 0.15) + (rng() - 0.5) * 30);
+        cumOil += oilRate * 30.44;
+        cumGas += gasRate * 30.44;
+        cumWater += waterRate * 30.44;
+        const date = new Date(startDate);
+        date.setMonth(date.getMonth() + m);
+        history.push({
+            month: m, date: date.toISOString().slice(0, 10),
+            oilRate: rd(oilRate), oilPredicted: rd(oilPredicted),
+            gasRate: rd(gasRate), waterRate: rd(waterRate),
+            waterCut: rd(waterCut, 3), gor: rd(gor),
+            co2Concentration: rd(co2Concentration, 1),
+            tubingPressure: rd(tubingPressure), casingPressure: rd(casingPressure), bhp: rd(bhp),
+            cumOil: Math.round(cumOil), cumGas: Math.round(cumGas), cumWater: Math.round(cumWater),
+        });
+    }
+    // Forecast 24 months
+    const forecast = [];
+    for (let m = 1; m <= 24; m++) {
+        const ft = monthsOnProduction + m;
+        const t = ft / (monthsOnProduction + 24);
+        const oilPredicted = arpsRate(params, ft);
+        const gor = well.gor + m * 3;
+        const gasRate = oilPredicted * gor / 1000;
+        const wc = Math.min(0.95, well.waterCut + m * 0.005);
+        const waterRate = oilPredicted * wc / (1 - wc);
+        cumOil += oilPredicted * 30.44;
+        cumGas += gasRate * 30.44;
+        cumWater += waterRate * 30.44;
+        const date = new Date();
+        date.setMonth(date.getMonth() + m);
+        forecast.push({
+            month: ft, date: date.toISOString().slice(0, 10),
+            oilRate: 0, oilPredicted: rd(oilPredicted),
+            gasRate: rd(gasRate), waterRate: rd(waterRate),
+            waterCut: rd(wc, 3), gor: rd(gor),
+            co2Concentration: rd(well.co2Concentration + m * 0.5, 1),
+            tubingPressure: 0, casingPressure: 0, bhp: 0,
+            cumOil: Math.round(cumOil), cumGas: Math.round(cumGas), cumWater: Math.round(cumWater),
+        });
+    }
+    // Fit quality
+    const histForFit = history.map(h => ({ month: h.month, rate: h.oilRate }));
+    const fit = fitDeclineCurve(histForFit);
+    const eur = calculateEUR(fit.params, 5);
+    const lastActual = history[history.length - 1]?.oilRate ?? 0;
+    const lastPredicted = arpsRate(fit.params, monthsOnProduction);
+    const gap = lastActual - lastPredicted;
+    // Trends (compare last 3 months vs prior 3 months)
+    const recent3 = history.slice(-3);
+    const prior3 = history.slice(-6, -3);
+    const avgRecent = (arr, fn) => arr.length ? arr.reduce((s, p) => s + fn(p), 0) / arr.length : 0;
+    const wcRecent = avgRecent(recent3, p => p.waterCut);
+    const wcPrior = avgRecent(prior3, p => p.waterCut);
+    const co2Recent = avgRecent(recent3, p => p.co2Concentration);
+    const co2Prior = avgRecent(prior3, p => p.co2Concentration);
+    const pRecent = avgRecent(recent3, p => p.bhp);
+    const pPrior = avgRecent(prior3, p => p.bhp);
+    const trend = (recent, prior, threshold) => recent > prior + threshold ? 'rising' : recent < prior - threshold ? 'falling' : 'stable';
+    // Health score: 100 = perfect, penalize for underperformance, high wc, high co2
+    let health = 100;
+    if (gap < 0)
+        health -= Math.min(30, Math.abs(gap) / lastPredicted * 100);
+    if (well.waterCut > 0.7)
+        health -= 20;
+    else if (well.waterCut > 0.5)
+        health -= 10;
+    if (well.co2Concentration > 15)
+        health -= 15;
+    else if (well.co2Concentration > 8)
+        health -= 5;
+    health = Math.max(0, Math.min(100, Math.round(health)));
+    return {
+        wellId, wellName,
+        declineParams: fit.params,
+        declineType: fit.declineType,
+        r2: fit.r2,
+        eur, remainingReserves: Math.max(0, eur - cumOil + forecast.reduce((s, f) => s + f.oilPredicted * 30.44, 0)),
+        currentRate: lastActual,
+        expectedRate: rd(lastPredicted),
+        performanceGap: rd(gap),
+        healthScore: health,
+        waterCutTrend: trend(wcRecent, wcPrior, 0.02),
+        co2Trend: trend(co2Recent, co2Prior, 1),
+        pressureTrend: trend(pRecent, pPrior, 10),
+        history, forecast,
+    };
+}
+function rd(v, n = 1) {
+    const f = 10 ** n;
+    return Math.round(v * f) / f;
 }
 /** Simple seeded PRNG for reproducible results */
 function seededRandom(seed) {

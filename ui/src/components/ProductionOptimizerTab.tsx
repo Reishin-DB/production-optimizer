@@ -384,19 +384,54 @@ function WellsView() {
 /*  Sub-tab: Optimize                                                  */
 /* ------------------------------------------------------------------ */
 
-function OptimizeView() {
+function OptimizeView({ recs }: { recs: RecsResponse | null }) {
+  const [selectedRec, setSelectedRec] = useState<string | null>(null);
   const [injChange, setInjChange] = useState(0);
   const [chokeChange, setChokeChange] = useState(0);
   const [co2PriceChange, setCo2PriceChange] = useState(0);
   const [whatIf, setWhatIf] = useState<WhatIfResponse | null>(null);
   const [econ, setEcon] = useState<FieldEconomics | null>(null);
   const [loading, setLoading] = useState(false);
+  const [autoRan, setAutoRan] = useState(false);
 
   useEffect(() => {
     fetch('/api/commercial/field-summary').then(r => r.json()).then(setEcon).catch(() => {});
   }, []);
 
-  const run = useCallback(async () => {
+  // When a recommendation is selected, pre-populate sliders and auto-run
+  const selectRec = useCallback((rec: Recommendation) => {
+    setSelectedRec(rec.id);
+    // Parse the recommendation to set sliders
+    const title = rec.title.toLowerCase();
+    if (title.includes('increase') && title.includes('injection')) {
+      setInjChange(15);
+      setChokeChange(0);
+    } else if (title.includes('reduce') || title.includes('decrease')) {
+      setInjChange(-10);
+      setChokeChange(0);
+    } else if (title.includes('switch') && title.includes('water')) {
+      setInjChange(-30); // switching to water = reducing CO2
+      setChokeChange(0);
+    } else if (title.includes('choke')) {
+      setInjChange(0);
+      setChokeChange(-15);
+    } else {
+      setInjChange(10);
+      setChokeChange(5);
+    }
+    setCo2PriceChange(0);
+    setAutoRan(false);
+  }, []);
+
+  // Auto-run when recommendation changes sliders
+  useEffect(() => {
+    if (selectedRec && !autoRan && (injChange !== 0 || chokeChange !== 0)) {
+      setAutoRan(true);
+      runScenario();
+    }
+  }, [selectedRec, injChange, chokeChange, autoRan]);
+
+  const runScenario = useCallback(async () => {
     setLoading(true);
     try {
       const r = await fetch('/api/production/what-if', {
@@ -414,143 +449,174 @@ function OptimizeView() {
     setLoading(false);
   }, [injChange, chokeChange, co2PriceChange]);
 
-  return (
-    <div className="optimize-view">
-      {/* Field Economics KPI bar */}
-      {econ && (
-        <div className="econ-bar">
-          <div className="econ-kpi">
-            <span className="econ-label">Revenue</span>
-            <span className="econ-value">${(econ.totalRevenue / 1000).toFixed(0)}K<small>/d</small></span>
-            {whatIf && <span className={`econ-delta ${whatIf.summary.totalDailyImpact >= 0 ? 'impact-pos' : 'impact-neg'}`}>
-              {whatIf.summary.totalDailyImpact >= 0 ? '+' : ''}${(whatIf.summary.totalDailyImpact / 1000).toFixed(1)}K
-            </span>}
-          </div>
-          <div className="econ-kpi">
-            <span className="econ-label">OpEx</span>
-            <span className="econ-value">${(econ.totalOpex / 1000).toFixed(0)}K<small>/d</small></span>
-          </div>
-          <div className="econ-kpi">
-            <span className="econ-label">CO₂ Cost</span>
-            <span className="econ-value">${(econ.totalCO2Cost / 1000).toFixed(0)}K<small>/d</small></span>
-          </div>
-          <div className="econ-kpi">
-            <span className="econ-label">Netback</span>
-            <span className="econ-value">${econ.fieldNetback.toFixed(2)}<small>/boe</small></span>
-          </div>
-          <div className="econ-kpi">
-            <span className="econ-label">Breakeven</span>
-            <span className="econ-value">${econ.breakeven}<small>/bbl</small></span>
-          </div>
-          <div className="econ-kpi">
-            <span className="econ-label">Carbon Credits</span>
-            <span className="econ-value econ-green">${(econ.carbonCreditRevenue / 1000).toFixed(0)}K<small>/d</small></span>
-          </div>
-        </div>
-      )}
+  const activeRec = selectedRec ? recs?.recommendations.find(r => r.id === selectedRec) : null;
 
-      <div className="opt-controls">
-        <h3>Adjust Parameters</h3>
-        <div className="opt-sliders">
-          <div className="opt-slider">
-            <div className="opt-slider-label">
-              <span>CO₂ Injection Rate</span>
-              <span className={`slider-val ${injChange > 0 ? 'pos' : injChange < 0 ? 'neg' : ''}`}>
-                {injChange > 0 ? '+' : ''}{injChange}%
-              </span>
-            </div>
-            <input type="range" min={-30} max={30} step={5} value={injChange}
-              onChange={e => setInjChange(Number(e.target.value))} />
-          </div>
-          <div className="opt-slider">
-            <div className="opt-slider-label">
-              <span>Choke Position</span>
-              <span className={`slider-val ${chokeChange > 0 ? 'pos' : chokeChange < 0 ? 'neg' : ''}`}>
-                {chokeChange > 0 ? '+' : ''}{chokeChange}%
-              </span>
-            </div>
-            <input type="range" min={-30} max={30} step={5} value={chokeChange}
-              onChange={e => setChokeChange(Number(e.target.value))} />
-          </div>
-          <div className="opt-slider">
-            <div className="opt-slider-label">
-              <span>CO₂ Price</span>
-              <span className={`slider-val ${co2PriceChange > 0 ? 'pos' : co2PriceChange < 0 ? 'neg' : ''}`}>
-                {co2PriceChange > 0 ? '+' : ''}{co2PriceChange.toFixed(2)} $/mcf
-              </span>
-            </div>
-            <input type="range" min={-0.5} max={0.5} step={0.05} value={co2PriceChange}
-              onChange={e => setCo2PriceChange(Number(e.target.value))} />
-          </div>
+  return (
+    <div className="scenario-view">
+      {/* Step 1: Pick a recommendation */}
+      <div className="scenario-picker">
+        <h3>Select a recommended action to simulate</h3>
+        <div className="scenario-chips">
+          {(recs?.recommendations ?? []).map(rec => (
+            <button
+              key={rec.id}
+              className={`scenario-chip ${selectedRec === rec.id ? 'active' : ''} scenario-chip-${rec.priority}`}
+              onClick={() => selectRec(rec)}
+            >
+              <span className={`priority-badge priority-${rec.priority}`}>{rec.priority}</span>
+              <span className="scenario-chip-title">{rec.title}</span>
+              <span className="scenario-chip-value">${(rec.estimatedImpact.annualRevenue / 1000).toFixed(0)}K/yr</span>
+            </button>
+          ))}
         </div>
-        <button className="run-btn" onClick={run} disabled={loading}>
-          {loading ? 'Computing...' : 'Run Scenario'}
-        </button>
       </div>
 
-      {whatIf ? (
-        <div className="opt-results">
-          {/* Impact summary */}
-          <div className="opt-impact-row">
-            <div className={`opt-impact-card ${whatIf.summary.totalDailyImpact >= 0 ? 'positive' : 'negative'}`}>
-              <span className="opt-impact-label">Daily</span>
-              <span className="opt-impact-value">
-                {whatIf.summary.totalDailyImpact >= 0 ? '+' : ''}${whatIf.summary.totalDailyImpact.toLocaleString()}/d
-              </span>
-            </div>
-            <div className={`opt-impact-card ${whatIf.summary.totalAnnualImpact >= 0 ? 'positive' : 'negative'}`}>
-              <span className="opt-impact-label">Annual</span>
-              <span className="opt-impact-value">
-                {whatIf.summary.totalAnnualImpact >= 0 ? '+' : ''}${(whatIf.summary.totalAnnualImpact / 1000).toFixed(0)}K
-              </span>
-            </div>
-            <div className="opt-impact-card">
-              <span className="opt-impact-label">Avg Oil Δ</span>
-              <span className="opt-impact-value">
-                {whatIf.summary.avgOilRateChange >= 0 ? '+' : ''}{whatIf.summary.avgOilRateChange} bbl/d
-              </span>
-            </div>
-            <div className={`opt-impact-card ${whatIf.summary.highRiskWells > 0 ? 'negative' : ''}`}>
-              <span className="opt-impact-label">High Risk</span>
-              <span className="opt-impact-value">{whatIf.summary.highRiskWells} wells</span>
+      {activeRec && (
+        <>
+          {/* Active recommendation context */}
+          <div className="scenario-context">
+            <div className="agent-icon">AI</div>
+            <div className="agent-message">
+              <strong>{activeRec.title}</strong> — {activeRec.description}
+              <br /><em>Adjust the sliders below to fine-tune, or run as-is.</em>
             </div>
           </div>
 
-          {/* Per-well results */}
-          <table className="opt-table">
-            <thead>
-              <tr>
-                <th>Well</th><th>Oil Rate</th><th>Δ Oil</th><th>Pressure</th>
-                <th>Δ Revenue</th><th>Risk</th>
-              </tr>
-            </thead>
-            <tbody>
-              {whatIf.results.map(r => (
-                <tr key={r.wellId}>
-                  <td className="well-name">{r.wellName}</td>
-                  <td>{r.predictedOilRate.toFixed(0)} bbl/d</td>
-                  <td className={r.oilRateChange >= 0 ? 'val-pos' : 'val-neg'}>
-                    {r.oilRateChange >= 0 ? '+' : ''}{r.oilRateChange.toFixed(1)}
-                  </td>
-                  <td>{r.predictedPressure} psi</td>
-                  <td className={r.dailyRevenueImpact >= 0 ? 'val-pos' : 'val-neg'}>
-                    {r.dailyRevenueImpact >= 0 ? '+' : ''}${r.dailyRevenueImpact}/d
-                  </td>
-                  <td><span className={`risk-badge risk-${r.breakthroughRisk}`}>{r.breakthroughRisk}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {whatIf.results[0]?.explanation && (
-            <div className="opt-explanation">
-              {whatIf.results[0].explanation}
+          {/* Economics bar */}
+          {econ && (
+            <div className="econ-bar">
+              <div className="econ-kpi">
+                <span className="econ-label">Revenue</span>
+                <span className="econ-value">${(econ.totalRevenue / 1000).toFixed(0)}K<small>/d</small></span>
+                {whatIf && <span className={`econ-delta ${whatIf.summary.totalDailyImpact >= 0 ? 'impact-pos' : 'impact-neg'}`}>
+                  {whatIf.summary.totalDailyImpact >= 0 ? '+' : ''}${(whatIf.summary.totalDailyImpact / 1000).toFixed(1)}K
+                </span>}
+              </div>
+              <div className="econ-kpi">
+                <span className="econ-label">OpEx</span>
+                <span className="econ-value">${(econ.totalOpex / 1000).toFixed(0)}K<small>/d</small></span>
+              </div>
+              <div className="econ-kpi">
+                <span className="econ-label">CO₂ Cost</span>
+                <span className="econ-value">${(econ.totalCO2Cost / 1000).toFixed(0)}K<small>/d</small></span>
+              </div>
+              <div className="econ-kpi">
+                <span className="econ-label">Netback</span>
+                <span className="econ-value">${econ.fieldNetback.toFixed(2)}<small>/boe</small></span>
+              </div>
+              <div className="econ-kpi">
+                <span className="econ-label">Breakeven</span>
+                <span className="econ-value">${econ.breakeven}<small>/bbl</small></span>
+              </div>
             </div>
           )}
-        </div>
-      ) : (
+
+          {/* Tuning sliders */}
+          <div className="scenario-tuning">
+            <div className="opt-sliders">
+              <div className="opt-slider">
+                <div className="opt-slider-label">
+                  <span>CO₂ Injection</span>
+                  <span className={`slider-val ${injChange > 0 ? 'pos' : injChange < 0 ? 'neg' : ''}`}>
+                    {injChange > 0 ? '+' : ''}{injChange}%
+                  </span>
+                </div>
+                <input type="range" min={-30} max={30} step={5} value={injChange}
+                  onChange={e => { setInjChange(Number(e.target.value)); setAutoRan(false); }} />
+              </div>
+              <div className="opt-slider">
+                <div className="opt-slider-label">
+                  <span>Choke Position</span>
+                  <span className={`slider-val ${chokeChange > 0 ? 'pos' : chokeChange < 0 ? 'neg' : ''}`}>
+                    {chokeChange > 0 ? '+' : ''}{chokeChange}%
+                  </span>
+                </div>
+                <input type="range" min={-30} max={30} step={5} value={chokeChange}
+                  onChange={e => { setChokeChange(Number(e.target.value)); setAutoRan(false); }} />
+              </div>
+              <div className="opt-slider">
+                <div className="opt-slider-label">
+                  <span>CO₂ Price</span>
+                  <span className={`slider-val ${co2PriceChange > 0 ? 'pos' : co2PriceChange < 0 ? 'neg' : ''}`}>
+                    {co2PriceChange > 0 ? '+' : ''}{co2PriceChange.toFixed(2)} $/mcf
+                  </span>
+                </div>
+                <input type="range" min={-0.5} max={0.5} step={0.05} value={co2PriceChange}
+                  onChange={e => { setCo2PriceChange(Number(e.target.value)); setAutoRan(false); }} />
+              </div>
+            </div>
+            <button className="run-btn" onClick={runScenario} disabled={loading}>
+              {loading ? 'Computing...' : 'Re-run Scenario'}
+            </button>
+          </div>
+
+          {/* Results */}
+          {whatIf && (
+            <div className="opt-results">
+              <div className="opt-impact-row">
+                <div className={`opt-impact-card ${whatIf.summary.totalDailyImpact >= 0 ? 'positive' : 'negative'}`}>
+                  <span className="opt-impact-label">Daily Impact</span>
+                  <span className="opt-impact-value">
+                    {whatIf.summary.totalDailyImpact >= 0 ? '+' : ''}${whatIf.summary.totalDailyImpact.toLocaleString()}/d
+                  </span>
+                </div>
+                <div className={`opt-impact-card ${whatIf.summary.totalAnnualImpact >= 0 ? 'positive' : 'negative'}`}>
+                  <span className="opt-impact-label">Annual Impact</span>
+                  <span className="opt-impact-value">
+                    {whatIf.summary.totalAnnualImpact >= 0 ? '+' : ''}${(whatIf.summary.totalAnnualImpact / 1000).toFixed(0)}K
+                  </span>
+                </div>
+                <div className="opt-impact-card">
+                  <span className="opt-impact-label">Avg Oil Change</span>
+                  <span className="opt-impact-value">
+                    {whatIf.summary.avgOilRateChange >= 0 ? '+' : ''}{whatIf.summary.avgOilRateChange} bbl/d
+                  </span>
+                </div>
+                <div className={`opt-impact-card ${whatIf.summary.highRiskWells > 0 ? 'negative' : ''}`}>
+                  <span className="opt-impact-label">Risk</span>
+                  <span className="opt-impact-value">{whatIf.summary.highRiskWells} high-risk</span>
+                </div>
+              </div>
+
+              <table className="opt-table">
+                <thead>
+                  <tr>
+                    <th>Well</th><th>Current</th><th>Predicted</th><th>Δ Oil</th>
+                    <th>Pressure</th><th>Δ Revenue</th><th>Risk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {whatIf.results.map(r => (
+                    <tr key={r.wellId}>
+                      <td className="well-name">{r.wellName}</td>
+                      <td>{r.baselineOilRate.toFixed(0)}</td>
+                      <td>{r.predictedOilRate.toFixed(0)}</td>
+                      <td className={r.oilRateChange >= 0 ? 'val-pos' : 'val-neg'}>
+                        {r.oilRateChange >= 0 ? '+' : ''}{r.oilRateChange.toFixed(1)} bbl/d
+                      </td>
+                      <td>{r.predictedPressure} psi</td>
+                      <td className={r.dailyRevenueImpact >= 0 ? 'val-pos' : 'val-neg'}>
+                        {r.dailyRevenueImpact >= 0 ? '+' : ''}${r.dailyRevenueImpact}/d
+                      </td>
+                      <td><span className={`risk-badge risk-${r.breakthroughRisk}`}>{r.breakthroughRisk}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {whatIf.results[0]?.explanation && (
+                <div className="opt-explanation">
+                  <strong>Physics:</strong> {whatIf.results[0].explanation}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {!activeRec && (
         <div className="opt-empty">
-          Adjust the sliders and click <strong>Run Scenario</strong> to see the physics-based impact on all 16 producer wells.
+          Select a recommended action above to simulate its impact across all wells.
         </div>
       )}
     </div>
@@ -680,7 +746,7 @@ export default function ProductionOptimizerTab() {
       <div className="sub-tab-content">
         {subTab === 'actions' && <RecommendationsView recs={recs} />}
         {subTab === 'wells' && <WellsView />}
-        {subTab === 'scenario' && <OptimizeView />}
+        {subTab === 'scenario' && <OptimizeView recs={recs} />}
       </div>
     </div>
   );

@@ -1,6 +1,34 @@
 /* ============================================================
-   CO2-EOR Digital Twin — Industrial Control Room Theme
+   Production Optimizer — Industrial Control Room Theme
    ============================================================ */
+
+:root {
+  --bg-root: #0f1117;
+  --bg-panel: #161b22;
+  --bg-card: #1c2129;
+  --bg-input: #0d1117;
+  --border: #30363d;
+  --border-light: #3d444d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --accent: #00d4aa;
+  --accent-dim: rgba(0, 212, 170, 0.15);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59, 130, 246, 0.15);
+  --warning: #f59e0b;
+  --warning-dim: rgba(245, 158, 11, 0.15);
+  --danger: #ef4444;
+  --danger-dim: rgba(239, 68, 68, 0.15);
+  --success: #10b981;
+  --success-dim: rgba(16, 185, 129, 0.15);
+  --co2: #06b6d4;
+  --co2-dim: rgba(6, 182, 212, 0.15);
+  --orange: #f97316;
+  --purple: #a855f7;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace;
+}
 
 /* ---------- Reset & Base ---------- */
 *,
@@ -1577,4 +1605,936 @@ body,
   .kpi-value {
     font-size: 14px;
   }
+}
+
+/* ============================================================
+   Production Optimizer Tab
+   ============================================================ */
+
+.prod-opt-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Sub-tab navigation ── */
+
+.sub-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.sub-tab-btn {
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sub-tab-btn:hover { color: #e6edf3; }
+.sub-tab-btn.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+.sub-tab-badge {
+  background: #da3633;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.sub-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* ── Wells View ── */
+
+.wells-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 10px;
+}
+
+.well-card {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.well-card:hover { border-color: #388bfd; }
+
+.well-card-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-family: 'SF Mono', monospace;
+  color: #8b949e;
+  margin-top: 4px;
+}
+
+.back-btn {
+  background: none;
+  border: 1px solid #30363d;
+  color: #58a6ff;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.back-btn:hover { border-color: #58a6ff; }
+
+.well-detail-view { max-width: 700px; }
+
+.well-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.well-detail-header h3 {
+  font-size: 18px;
+  color: #e6edf3;
+  margin: 0;
+}
+
+.well-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.stat {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.stat-label {
+  display: block;
+  font-size: 10px;
+  color: #8b949e;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: 'SF Mono', monospace;
+  color: #e6edf3;
+}
+
+.stat-value small {
+  font-size: 11px;
+  font-weight: 400;
+  color: #8b949e;
+}
+
+/* ── Field Economics Bar ── */
+
+.econ-bar {
+  display: flex;
+  gap: 2px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.econ-kpi {
+  flex: 1;
+  padding: 10px 12px;
+  text-align: center;
+  border-right: 1px solid #21262d;
+}
+
+.econ-kpi:last-child { border-right: none; }
+
+.econ-label {
+  display: block;
+  font-size: 9px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+}
+
+.econ-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'SF Mono', monospace;
+  color: #e6edf3;
+}
+
+.econ-value small {
+  font-size: 10px;
+  font-weight: 400;
+  color: #8b949e;
+}
+
+.econ-green { color: #3fb950; }
+
+.econ-delta {
+  display: block;
+  font-size: 11px;
+  font-family: 'SF Mono', monospace;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* ── Optimize View ── */
+
+.optimize-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.opt-controls {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.opt-controls h3 {
+  font-size: 14px;
+  color: #e6edf3;
+  margin: 0 0 16px 0;
+}
+
+.opt-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.opt-slider { max-width: 500px; }
+
+.opt-slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.opt-slider input[type="range"] {
+  width: 100%;
+  accent-color: #58a6ff;
+}
+
+.opt-impact-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.opt-impact-card {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+}
+
+.opt-impact-card.positive { border-color: #238636; }
+.opt-impact-card.negative { border-color: #da3633; }
+
+.opt-impact-label {
+  display: block;
+  font-size: 10px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.opt-impact-value {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: 'SF Mono', monospace;
+  color: #e6edf3;
+}
+
+.opt-impact-card.positive .opt-impact-value { color: #3fb950; }
+.opt-impact-card.negative .opt-impact-value { color: #f85149; }
+
+.opt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.opt-table th {
+  text-align: left;
+  padding: 8px 10px;
+  color: #8b949e;
+  border-bottom: 1px solid #30363d;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.opt-table td {
+  padding: 8px 10px;
+  color: #e6edf3;
+  border-bottom: 1px solid #21262d;
+  font-family: 'SF Mono', monospace;
+}
+
+.opt-explanation {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #8b949e;
+  padding: 10px 14px;
+  background: #0d1117;
+  border-radius: 6px;
+  border-left: 3px solid #58a6ff;
+  line-height: 1.6;
+}
+
+.opt-empty {
+  color: #8b949e;
+  font-size: 14px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+/* ── Recommendations View ── */
+
+.recs-summary {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #8b949e;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #21262d;
+}
+
+.recs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rec-revenue {
+  margin-left: auto;
+  font-family: 'SF Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rec-metrics {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  font-family: 'SF Mono', monospace;
+  margin-top: 6px;
+}
+
+.prod-section {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-badge {
+  font-size: 11px;
+  font-weight: 400;
+  color: #8b949e;
+  background: #0d1117;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* ── Recommendations ── */
+
+.rec-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rec-card {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 12px;
+  border-left: 3px solid #8b949e;
+}
+
+.rec-high { border-left-color: #f85149; }
+.rec-medium { border-left-color: #d29922; }
+.rec-low { border-left-color: #3fb950; }
+
+.rec-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.priority-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+
+.priority-high { background: rgba(248,81,73,0.15); color: #f85149; }
+.priority-medium { background: rgba(210,153,34,0.15); color: #d29922; }
+.priority-low { background: rgba(63,185,80,0.15); color: #3fb950; }
+
+.rec-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.rec-desc {
+  font-size: 12px;
+  color: #8b949e;
+  margin: 0 0 8px 0;
+  line-height: 1.5;
+}
+
+.rec-impact {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  font-family: 'SF Mono', monospace;
+}
+
+.impact-pos { color: #3fb950; }
+.impact-neg { color: #f85149; }
+.impact-annual { color: #58a6ff; }
+.impact-oil { font-weight: 600; }
+
+.rec-physics {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.rec-physics summary {
+  cursor: pointer;
+  color: #58a6ff;
+  font-size: 11px;
+}
+
+.rec-physics p {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.rec-risk {
+  color: #d29922;
+}
+
+/* ── Decline Curves ── */
+
+.decline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 10px;
+}
+
+.decline-card {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.decline-card:hover { border-color: #388bfd; }
+.decline-card.selected { border-color: #58a6ff; background: #0d1117ee; }
+
+.decline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.decline-well {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.decline-type {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+
+.type-hyperbolic { background: rgba(56,139,253,0.15); color: #58a6ff; }
+.type-exponential { background: rgba(210,153,34,0.15); color: #d29922; }
+.type-harmonic { background: rgba(163,113,247,0.15); color: #a371f7; }
+
+.decline-params {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  font-family: 'SF Mono', monospace;
+  color: #8b949e;
+  margin-top: 4px;
+}
+
+.decline-params sub {
+  font-size: 8px;
+}
+
+.decline-reserves {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: #58a6ff;
+  margin-top: 4px;
+  font-family: 'SF Mono', monospace;
+}
+
+/* ── Well Detail ── */
+
+.well-detail .detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.detail-card {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.detail-card h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e6edf3;
+  margin: 0 0 8px 0;
+}
+
+.detail-table {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+}
+
+.detail-table td {
+  padding: 4px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.detail-table td:first-child {
+  color: #8b949e;
+}
+
+.detail-table td:last-child {
+  text-align: right;
+  color: #e6edf3;
+  font-family: 'SF Mono', monospace;
+}
+
+/* ── What-If Optimizer ── */
+
+.whatif-controls {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.slider-group {
+  flex: 1;
+  min-width: 180px;
+}
+
+.slider-group label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.slider-val {
+  font-family: 'SF Mono', monospace;
+  font-weight: 600;
+}
+
+.slider-val.pos { color: #3fb950; }
+.slider-val.neg { color: #f85149; }
+
+.slider-group input[type="range"] {
+  width: 100%;
+  accent-color: #58a6ff;
+  height: 4px;
+}
+
+.run-btn {
+  background: #238636;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.run-btn:hover { background: #2ea043; }
+.run-btn:disabled { opacity: 0.5; cursor: wait; }
+
+/* ── What-If Results ── */
+
+.whatif-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.summary-card {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+
+.summary-card.positive { border-color: #238636; }
+.summary-card.negative { border-color: #da3633; }
+
+.summary-label {
+  display: block;
+  font-size: 10px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.summary-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'SF Mono', monospace;
+  color: #e6edf3;
+}
+
+.summary-card.positive .summary-value { color: #3fb950; }
+.summary-card.negative .summary-value { color: #f85149; }
+
+.whatif-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.whatif-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: #8b949e;
+  border-bottom: 1px solid #30363d;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.whatif-table td {
+  padding: 6px 8px;
+  color: #e6edf3;
+  border-bottom: 1px solid #21262d;
+  font-family: 'SF Mono', monospace;
+}
+
+.whatif-table .well-name {
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.val-pos { color: #3fb950; }
+.val-neg { color: #f85149; }
+
+.risk-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.risk-low { background: rgba(63,185,80,0.15); color: #3fb950; }
+.risk-medium { background: rgba(210,153,34,0.15); color: #d29922; }
+.risk-high { background: rgba(248,81,73,0.15); color: #f85149; }
+
+.whatif-explanation {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #8b949e;
+  padding: 8px 12px;
+  background: #0d1117;
+  border-radius: 4px;
+  border-left: 3px solid #58a6ff;
+  line-height: 1.5;
+}
+
+.tab-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #8b949e;
+  font-size: 14px;
+}
+
+/* ============================================================
+   Twin + Genie Chat Split Layout
+   ============================================================ */
+
+.twin-split {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.twin-panel {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Genie Chat Panel ---------- */
+.chat-panel {
+  width: 480px;
+  min-width: 420px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+}
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.chat-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 212, 170, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.chat-header-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.chat-header-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-msg {
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.chat-msg-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+}
+.chat-msg-user {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  margin-left: 32px;
+}
+.chat-msg-genie {
+  background: rgba(0, 212, 170, 0.06);
+  border: 1px solid rgba(0, 212, 170, 0.18);
+  color: var(--text-secondary);
+}
+.chat-msg-agent {
+  background: rgba(249, 115, 22, 0.06);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  color: var(--text-secondary);
+}
+.chat-msg strong {
+  color: var(--text-primary);
+}
+.chat-handoff {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  border-radius: 12px;
+  font-size: 14px;
+}
+.chat-handoff-arrow {
+  color: var(--text-muted);
+  font-size: 16px;
+}
+.chat-handoff-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--orange);
+}
+.chat-input-area {
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chat-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.chat-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.chat-input-form {
+  display: flex;
+  gap: 8px;
+}
+.chat-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.chat-input::placeholder {
+  color: var(--text-muted);
+}
+.chat-input:focus {
+  border-color: var(--accent);
+}
+.chat-send-btn {
+  width: 40px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--bg-root);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-send-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.chat-send-btn:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+.chat-continue-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg-root);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-sans);
+}
+.chat-continue-btn:hover {
+  filter: brightness(1.1);
 }

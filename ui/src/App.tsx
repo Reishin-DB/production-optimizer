@@ -8,6 +8,8 @@ import CO2BalanceTab from './components/CO2BalanceTab';
 import EconomicsTab from './components/EconomicsTab';
 import ShiftLogTab from './components/ShiftLogTab';
 import DigitalTwinTab from './components/DigitalTwinTab';
+import GenieChatPanel from './components/GenieChatPanel';
+import ProductionOptimizerTab from './components/ProductionOptimizerTab';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -71,13 +73,10 @@ export interface TwinState {
 /* ------------------------------------------------------------------ */
 
 const TABS = [
+  { id: 'optimizer', label: 'Production Optimizer' },
   { id: 'field', label: 'Field Overview' },
-  { id: 'dataflow', label: 'Data & AI Flow' },
-  { id: 'injection', label: 'Injection Patterns' },
-  { id: 'co2balance', label: 'CO\u2082 Balance' },
-  { id: 'economics', label: 'Economics' },
-  { id: 'shift', label: 'Shift Log' },
   { id: 'twin', label: 'Digital Twin' },
+  { id: 'dataflow', label: 'Data & AI Flow' },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -87,7 +86,7 @@ type TabId = (typeof TABS)[number]['id'];
 /* ------------------------------------------------------------------ */
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('field');
+  const [activeTab, setActiveTab] = useState<TabId>('optimizer');
   const [twinState, setTwinState] = useState<TwinState | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [shiftLabel, setShiftLabel] = useState<string>('');
@@ -181,6 +180,8 @@ export default function App() {
   /* ---------------------------------------------------------------- */
   function renderTab() {
     switch (activeTab) {
+      case 'optimizer':
+        return <ProductionOptimizerTab />;
       case 'field':
         return <GeospatialTab />;
       case 'dataflow':
@@ -189,12 +190,16 @@ export default function App() {
         return <InjectionPatternsTab />;
       case 'co2balance':
         return <CO2BalanceTab />;
-      case 'economics':
-        return <EconomicsTab />;
+      // economics merged into optimizer
       case 'shift':
         return <ShiftLogTab />;
       case 'twin':
-        return <DigitalTwinTab />;
+        return (
+          <div className="twin-split">
+            <div className="twin-panel"><DigitalTwinTab /></div>
+            <GenieChatPanel />
+          </div>
+        );
       default:
         return null;
     }

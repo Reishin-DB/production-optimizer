@@ -301,6 +301,22 @@ function SeparatorSVG({
         width={4} height={(H - 16) * fac.utilization}
         fill={hc} opacity={0.5} rx={1} />
 
+      {/* Animated liquid flow inside vessel */}
+      {[0, 1, 2].map((i) => (
+        <circle key={`cpf-b${i}`} cx={x + headR + 30 + i * 70} cy={y + H * 0.6} r={3}
+          fill={i === 0 ? C.green : i === 1 ? C.blue : C.red} opacity={0}>
+          <animate attributeName="cy" values={`${y + H * 0.7};${y + H * 0.3};${y + H * 0.7}`}
+            dur={`${2 + i * 0.7}s`} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;0.4;0"
+            dur={`${2 + i * 0.7}s`} repeatCount="indefinite" />
+        </circle>
+      ))}
+      {/* Pulsing glow on vessel body */}
+      <rect x={x + headR} y={y} width={W - headR * 2} height={H}
+        rx={0} fill={hc} opacity={0}>
+        <animate attributeName="opacity" values="0;0.06;0" dur="3s" repeatCount="indefinite" />
+      </rect>
+
       {/* Inlet nozzle (top-left) */}
       <rect x={x + headR + 20} y={y - 12} width={12} height={14}
         fill={C.bg} stroke={C.steel} strokeWidth={1} />
@@ -361,11 +377,20 @@ function CompressorSVG({
       <rect x={x} y={y} width={90} height={60} rx={4}
         fill={hc} fillOpacity={isSelected ? 0.12 : 0.05}
         stroke={hc} strokeWidth={sw} />
-      {/* Motor windings (decorative circles) */}
+      {/* Motor windings (decorative circles) — animated rotation */}
       <circle cx={x + 30} cy={y + 30} r={18} fill="none" stroke={hc}
         strokeWidth={0.6} opacity={0.3} />
-      <circle cx={x + 30} cy={y + 30} r={10} fill="none" stroke={hc}
-        strokeWidth={0.6} opacity={0.2} />
+      <g>
+        <circle cx={x + 30} cy={y + 30} r={10} fill="none" stroke={hc}
+          strokeWidth={0.6} opacity={0.2} strokeDasharray="6 4" />
+        <animateTransform attributeName="transform" type="rotate"
+          from={`0 ${x + 30} ${y + 30}`} to={`360 ${x + 30} ${y + 30}`}
+          dur="2s" repeatCount="indefinite" />
+      </g>
+      {/* Pulsing motor glow */}
+      <circle cx={x + 30} cy={y + 30} r={18} fill={hc} opacity={0}>
+        <animate attributeName="opacity" values="0;0.08;0" dur="1.2s" repeatCount="indefinite" />
+      </circle>
       <text x={x + 30} y={y + 34} textAnchor="middle" fill={hc}
         fontSize="10" fontWeight="700" opacity={0.5}
         style={{ fontFamily: 'monospace', pointerEvents: 'none' }}>M</text>
@@ -383,9 +408,18 @@ function CompressorSVG({
       {/* Cylinder head */}
       <rect x={x + 170} y={y + 10} width={10} height={40} rx={3}
         fill={hc} fillOpacity={0.15} stroke={hc} strokeWidth={1} />
-      {/* Piston rod */}
-      <line x1={x + 108} y1={y + 30} x2={x + 168} y2={y + 30}
-        stroke={hc} strokeWidth={2} opacity={0.3} />
+      {/* Piston rod — animated oscillation */}
+      <line x1={x + 108} y1={y + 30} x2={x + 150} y2={y + 30}
+        stroke={hc} strokeWidth={2} opacity={0.4}>
+        <animate attributeName="x2" values={`${x + 135};${x + 165};${x + 135}`}
+          dur="1.2s" repeatCount="indefinite" />
+      </line>
+      {/* Piston head */}
+      <rect x={x + 148} y={y + 22} width={6} height={16} rx={1}
+        fill={hc} opacity={0.3}>
+        <animate attributeName="x" values={`${x + 133};${x + 163};${x + 133}`}
+          dur="1.2s" repeatCount="indefinite" />
+      </rect>
       {/* Suction / discharge nozzles */}
       <rect x={x + 120} y={y - 8} width={10} height={14}
         fill={C.bg} stroke={C.steel} strokeWidth={1} />
@@ -453,6 +487,23 @@ function RecycleTowerSVG({
           stroke={hc} strokeWidth={0.8} opacity={0.25} />
       ))}
 
+      {/* Animated rising bubbles (CO₂ flowing up through trays) */}
+      {[0, 1, 2, 3].map((i) => (
+        <circle key={`co2r-b${i}`} cx={x + 12 + i * 10} cy={y + 15 + H} r={2.5}
+          fill={C.cyan} opacity={0}>
+          <animate attributeName="cy"
+            values={`${y + 15 + H * 0.9};${y + 15 + H * 0.1}`}
+            dur={`${2.5 + i * 0.5}s`} begin={`${i * 0.6}s`} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;0.5;0.3;0"
+            dur={`${2.5 + i * 0.5}s`} begin={`${i * 0.6}s`} repeatCount="indefinite" />
+        </circle>
+      ))}
+      {/* Pulsing glow on tower */}
+      <rect x={x} y={y + 15} width={W} height={H} rx={6}
+        fill={hc} opacity={0}>
+        <animate attributeName="opacity" values="0;0.06;0" dur="4s" repeatCount="indefinite" />
+      </rect>
+
       {/* Inlet nozzle (middle-right) */}
       <rect x={x + W} y={y + 15 + H * 0.4} width={12} height={8}
         fill={C.bg} stroke={C.steel} strokeWidth={1} />
@@ -513,13 +564,26 @@ function SWDSVG({
       <rect x={x} y={y} width={80} height={50} rx={4}
         fill={hc} fillOpacity={isSelected ? 0.12 : 0.05}
         stroke={hc} strokeWidth={sw} />
-      {/* Pump impeller symbol */}
+      {/* Pump impeller symbol — animated rotation */}
       <circle cx={x + 40} cy={y + 25} r={16} fill="none"
         stroke={hc} strokeWidth={1} opacity={0.35} />
-      <line x1={x + 40} y1={y + 9} x2={x + 40} y2={y + 41}
-        stroke={hc} strokeWidth={1} opacity={0.2} />
-      <line x1={x + 24} y1={y + 25} x2={x + 56} y2={y + 25}
-        stroke={hc} strokeWidth={1} opacity={0.2} />
+      <g>
+        <line x1={x + 40} y1={y + 9} x2={x + 40} y2={y + 41}
+          stroke={hc} strokeWidth={1} opacity={0.3} />
+        <line x1={x + 24} y1={y + 25} x2={x + 56} y2={y + 25}
+          stroke={hc} strokeWidth={1} opacity={0.3} />
+        <line x1={x + 28.7} y1={y + 13.7} x2={x + 51.3} y2={y + 36.3}
+          stroke={hc} strokeWidth={1} opacity={0.3} />
+        <line x1={x + 51.3} y1={y + 13.7} x2={x + 28.7} y2={y + 36.3}
+          stroke={hc} strokeWidth={1} opacity={0.3} />
+        <animateTransform attributeName="transform" type="rotate"
+          from={`0 ${x + 40} ${y + 25}`} to={`360 ${x + 40} ${y + 25}`}
+          dur="3s" repeatCount="indefinite" />
+      </g>
+      {/* Pulsing pump glow */}
+      <circle cx={x + 40} cy={y + 25} r={16} fill={hc} opacity={0}>
+        <animate attributeName="opacity" values="0;0.1;0" dur="1.5s" repeatCount="indefinite" />
+      </circle>
       <text x={x + 40} y={y + 29} textAnchor="middle" fill={hc}
         fontSize="10" fontWeight="700" opacity={0.5}
         style={{ fontFamily: 'monospace', pointerEvents: 'none' }}>P</text>
@@ -571,7 +635,7 @@ function SWDSVG({
   );
 }
 
-/** Flare stack with animated flame */
+/** Flare stack — oil derrick style with crown block, V-door, and flame */
 function FlareStackSVG({
   x, y, flare, isSelected, onClick,
 }: {
@@ -582,58 +646,143 @@ function FlareStackSVG({
   const c = isActive ? C.orange : C.muted;
   const sw = isSelected ? 2.5 : 1.5;
 
+  const baseW = 36;
+  const topW = 10;
+  const H = 70;
+  const top = y;
+  const bot = y + H;
+
+  // Leg interpolation at a given fraction from bottom
+  const legX = (frac: number) => {
+    const hw = (baseW / 2) * (1 - frac) + (topW / 2) * frac;
+    return hw;
+  };
+
   return (
     <g onClick={onClick} style={{ cursor: 'pointer' }}>
-      {/* Stack base */}
-      <rect x={x - 4} y={y + 60} width={8} height={6} rx={1}
-        fill={C.steelDark} stroke={C.steel} strokeWidth={0.8} />
-      {/* Support legs */}
-      <line x1={x - 8} y1={y + 66} x2={x} y2={y + 20}
-        stroke={C.steel} strokeWidth={1.2} />
-      <line x1={x + 8} y1={y + 66} x2={x} y2={y + 20}
-        stroke={C.steel} strokeWidth={1.2} />
-      {/* Main stack */}
-      <rect x={x - 3} y={y + 8} width={6} height={52} rx={1}
-        fill={c} fillOpacity={isSelected ? 0.15 : 0.08}
-        stroke={c} strokeWidth={sw} />
-      {/* Wind brace */}
-      <line x1={x - 6} y1={y + 50} x2={x + 6} y2={y + 35}
-        stroke={C.steel} strokeWidth={0.6} opacity={0.3} />
 
-      {/* Flame tip */}
+      {/* Substructure / rig floor */}
+      <rect x={x - baseW / 2 - 6} y={bot} width={baseW + 12} height={8} rx={1}
+        fill={C.steelDark} fillOpacity={0.2} stroke={C.steel} strokeWidth={1} />
+      {/* Floor deck lines */}
+      <line x1={x - baseW / 2 - 4} y1={bot + 4} x2={x + baseW / 2 + 4} y2={bot + 4}
+        stroke={C.steel} strokeWidth={0.5} opacity={0.3} />
+
+      {/* 4 derrick legs (A-frame taper) */}
+      <line x1={x - baseW / 2} y1={bot} x2={x - topW / 2} y2={top + 4}
+        stroke={C.steel} strokeWidth={2} />
+      <line x1={x + baseW / 2} y1={bot} x2={x + topW / 2} y2={top + 4}
+        stroke={C.steel} strokeWidth={2} />
+      {/* Rear legs (slightly inset for depth) */}
+      <line x1={x - baseW / 2 + 4} y1={bot} x2={x - topW / 2 + 2} y2={top + 4}
+        stroke={C.steel} strokeWidth={1} opacity={0.3} />
+      <line x1={x + baseW / 2 - 4} y1={bot} x2={x + topW / 2 - 2} y2={top + 4}
+        stroke={C.steel} strokeWidth={1} opacity={0.3} />
+
+      {/* Horizontal girts (cross members) */}
+      {[0.15, 0.35, 0.55, 0.75, 0.9].map((frac) => {
+        const yy = bot - H * frac;
+        const hw = legX(frac);
+        return (
+          <line key={frac} x1={x - hw} y1={yy} x2={x + hw} y2={yy}
+            stroke={C.steel} strokeWidth={0.7} opacity={0.35} />
+        );
+      })}
+
+      {/* X-bracing between girts */}
+      {[0.15, 0.55].map((frac) => {
+        const y1 = bot - H * frac;
+        const y2 = bot - H * (frac + 0.2);
+        const hw1 = legX(frac);
+        const hw2 = legX(frac + 0.2);
+        return (
+          <g key={`xb${frac}`}>
+            <line x1={x - hw1} y1={y1} x2={x + hw2} y2={y2}
+              stroke={C.steel} strokeWidth={0.5} opacity={0.2} />
+            <line x1={x + hw1} y1={y1} x2={x - hw2} y2={y2}
+              stroke={C.steel} strokeWidth={0.5} opacity={0.2} />
+          </g>
+        );
+      })}
+
+      {/* Crown block at top */}
+      <rect x={x - topW / 2 - 2} y={top} width={topW + 4} height={6} rx={1}
+        fill={c} fillOpacity={isSelected ? 0.2 : 0.1}
+        stroke={c} strokeWidth={sw} />
+      {/* Sheaves (pulleys) */}
+      <circle cx={x - 2} cy={top + 3} r={1.5} fill="none" stroke={c} strokeWidth={0.6} opacity={0.5} />
+      <circle cx={x + 2} cy={top + 3} r={1.5} fill="none" stroke={c} strokeWidth={0.6} opacity={0.5} />
+
+      {/* Drill string / kelly hanging from crown */}
+      <line x1={x} y1={top + 6} x2={x} y2={bot - 4}
+        stroke={C.steel} strokeWidth={1.5} opacity={0.25} />
+
+      {/* V-door opening (bottom left) */}
+      <line x1={x - baseW / 2} y1={bot} x2={x - baseW / 2 - 10} y2={bot + 6}
+        stroke={C.steel} strokeWidth={1.2} opacity={0.4} />
+
+      {/* Monkey board platform (3/4 up) */}
+      {(() => {
+        const mbFrac = 0.72;
+        const mbHw = legX(mbFrac);
+        const mbY = bot - H * mbFrac;
+        return (
+          <rect x={x - mbHw - 2} y={mbY - 1} width={(mbHw + 2) * 2} height={3} rx={0.5}
+            fill={C.steel} fillOpacity={0.15} stroke={C.steel} strokeWidth={0.6} />
+        );
+      })()}
+
+      {/* Flame at the top */}
       {isActive && (
         <g>
-          {/* Outer flame glow */}
-          <ellipse cx={x} cy={y - 4} rx={12} ry={16} fill={C.orange} opacity={0.08}>
-            <animate attributeName="ry" values="16;20;16" dur="1.5s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.08;0.15;0.08" dur="1.5s" repeatCount="indefinite" />
+          {/* Heat glow */}
+          <ellipse cx={x} cy={top - 10} rx={14} ry={10} fill={C.orange} opacity={0.06}>
+            <animate attributeName="ry" values="10;16;10" dur="2s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.06;0.12;0.06" dur="2s" repeatCount="indefinite" />
           </ellipse>
+          {/* Outer flame */}
+          <path
+            d={`M${x-5},${top+1} Q${x-8},${top-10} ${x+1},${top-16} Q${x+7},${top-8} ${x+5},${top+1}`}
+            fill={C.orange} fillOpacity={0.5} stroke="none">
+            <animate attributeName="d"
+              values={
+                `M${x-5},${top+1} Q${x-8},${top-10} ${x+1},${top-16} Q${x+7},${top-8} ${x+5},${top+1};`
+                + `M${x-4},${top+1} Q${x-10},${top-12} ${x-1},${top-20} Q${x+8},${top-10} ${x+4},${top+1};`
+                + `M${x-5},${top+1} Q${x-6},${top-8} ${x+3},${top-14} Q${x+10},${top-9} ${x+5},${top+1};`
+                + `M${x-5},${top+1} Q${x-8},${top-10} ${x+1},${top-16} Q${x+7},${top-8} ${x+5},${top+1}`
+              }
+              dur="1.8s" repeatCount="indefinite" />
+          </path>
           {/* Inner flame */}
           <path
-            d={`M${x-6},${y+8} Q${x-4},${y-8} ${x},${y-12} Q${x+4},${y-8} ${x+6},${y+8}`}
-            fill={C.orange} fillOpacity={0.6} stroke={C.yellow} strokeWidth={0.8}>
+            d={`M${x-2},${top} Q${x-3},${top-5} ${x},${top-8} Q${x+3},${top-5} ${x+2},${top}`}
+            fill={C.yellow} fillOpacity={0.7} stroke="none">
             <animate attributeName="d"
-              values={`M${x-6},${y+8} Q${x-4},${y-8} ${x},${y-12} Q${x+4},${y-8} ${x+6},${y+8};M${x-5},${y+8} Q${x-6},${y-10} ${x},${y-15} Q${x+6},${y-10} ${x+5},${y+8};M${x-6},${y+8} Q${x-4},${y-8} ${x},${y-12} Q${x+4},${y-8} ${x+6},${y+8}`}
-              dur="2s" repeatCount="indefinite" />
+              values={
+                `M${x-2},${top} Q${x-3},${top-5} ${x},${top-8} Q${x+3},${top-5} ${x+2},${top};`
+                + `M${x-2},${top} Q${x-4},${top-7} ${x+1},${top-12} Q${x+4},${top-6} ${x+2},${top};`
+                + `M${x-2},${top} Q${x-3},${top-5} ${x},${top-8} Q${x+3},${top-5} ${x+2},${top}`
+              }
+              dur="1.2s" repeatCount="indefinite" />
           </path>
-          {/* Core */}
-          <ellipse cx={x} cy={y + 2} rx={3} ry={6} fill={C.yellow} opacity={0.5}>
-            <animate attributeName="ry" values="6;8;6" dur="1s" repeatCount="indefinite" />
+          {/* White core */}
+          <ellipse cx={x} cy={top - 1} rx={2} ry={3} fill="#fff" opacity={0.4}>
+            <animate attributeName="opacity" values="0.3;0.6;0.3" dur="0.8s" repeatCount="indefinite" />
           </ellipse>
         </g>
       )}
       {!isActive && (
-        <circle cx={x} cy={y + 5} r={3} fill={C.muted} opacity={0.3} />
+        <circle cx={x} cy={top + 2} r={2} fill={C.muted} opacity={0.3} />
       )}
 
       {/* Label */}
-      <text x={x} y={y + 78} textAnchor="middle"
+      <text x={x} y={bot + 20} textAnchor="middle"
         fill={isSelected ? C.text : C.muted} fontSize="8" fontWeight="600"
         style={{ fontFamily: 'monospace', pointerEvents: 'none' }}>
         {flare.id}
       </text>
       {isActive && (
-        <text x={x} y={y + 88} textAnchor="middle"
+        <text x={x} y={bot + 30} textAnchor="middle"
           fill={C.orange} fontSize="7" fontWeight="700"
           style={{ fontFamily: 'monospace', pointerEvents: 'none' }}>
           {flare.currentRate}Mcf/d
@@ -753,8 +902,8 @@ function pipeColor(product: string): string {
 /*  Layout constants                                                   */
 /* ------------------------------------------------------------------ */
 
-const VW = 1900;
-const VH = 900;
+const VW = 1600;
+const VH = 810;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -812,26 +961,28 @@ export default function DigitalTwinTab() {
 
   // ---------- Industrial P&ID Layout ----------
 
-  // Pattern boxes — single horizontal row
+  // Pattern boxes — single horizontal row, wider spacing for readability
   const patBoxes: Record<string, { x: number; y: number; w: number; h: number }> = {
-    'PAT-A': { x: 375, y: 72, w: 318, h: 283 },
-    'PAT-B': { x: 711, y: 72, w: 258, h: 283 },
-    'PAT-C': { x: 987, y: 72, w: 238, h: 283 },
-    'PAT-D': { x: 1243, y: 72, w: 238, h: 283 },
+    'PAT-A': { x: 375, y: 72, w: 280, h: 283 },
+    'PAT-B': { x: 670, y: 72, w: 280, h: 283 },
+    'PAT-C': { x: 965, y: 72, w: 250, h: 283 },
+    'PAT-D': { x: 1230, y: 72, w: 250, h: 283 },
   };
 
   // Injector positions (y=100, connect UP to CO2 injection header at y=88)
+  // Centred within each pattern box
   const injectorPos: Record<string, number> = {
-    'W-A05': 420, 'W-A06': 466, 'W-B05': 750, 'W-B06': 878,
-    'W-C05': 1100, 'W-D05': 1356,
+    'W-A05': 480, 'W-A06': 540, 'W-B05': 760, 'W-B06': 860,
+    'W-C05': 1090, 'W-D05': 1355,
   };
 
   // Producer positions (y=240, connect DOWN to gathering header at y=340)
+  // Evenly spread within each pattern with 55px spacing
   const producerPos: Record<string, number> = {
-    'W-A01': 400, 'W-A02': 447, 'W-A03': 565, 'W-A04': 612,
-    'W-B01': 727, 'W-B02': 773, 'W-B03': 855, 'W-B04': 902,
-    'W-C01': 1003, 'W-C02': 1049, 'W-C03': 1151, 'W-C04': 1197,
-    'W-D01': 1259, 'W-D02': 1305, 'W-D03': 1403, 'W-D04': 1449,
+    'W-A01': 400, 'W-A02': 455, 'W-A03': 560, 'W-A04': 615,
+    'W-B01': 695, 'W-B02': 750, 'W-B03': 855, 'W-B04': 910,
+    'W-C01': 990, 'W-C02': 1045, 'W-C03': 1130, 'W-C04': 1185,
+    'W-D01': 1255, 'W-D02': 1310, 'W-D03': 1395, 'W-D04': 1450,
   };
 
   // Monitoring sensor positions (near equipment)
@@ -840,10 +991,10 @@ export default function DigitalTwinTab() {
     'MON-P02': { x: 1248, y: 48 },
     'MON-S01': { x: 700, y: 58 },
     'MON-S02': { x: 850, y: 58 },
-    'MON-G01': { x: 1488, y: 355 },
+    'MON-G01': { x: 1100, y: 432 },
     'MON-G02': { x: 389, y: 355 },
-    'MON-W01': { x: 1500, y: 390 },
-    'MON-W02': { x: 1680, y: 845 },
+    'MON-W01': { x: 660, y: 432 },
+    'MON-W02': { x: 1120, y: 680 },
   };
 
   // W-SWD01 standalone (near SWD, NOT inside Pattern D)
@@ -872,12 +1023,8 @@ export default function DigitalTwinTab() {
           {/* Background */}
           <rect x={0} y={0} width={VW} height={VH} fill={C.bg} />
 
-          {/* Title */}
-          <text x={VW / 2} y={28} textAnchor="middle" fill={C.text}
-            fontSize="16" fontWeight="700" style={sans}>
-            CO&#x2082;-EOR Field P&amp;ID — Digital Twin
-          </text>
-          <text x={VW / 2} y={44} textAnchor="middle" fill={C.muted}
+          {/* Subtitle only */}
+          <text x={VW / 2} y={28} textAnchor="middle" fill={C.muted}
             fontSize="10" style={mono}>
             Live SCADA telemetry — click any equipment for details
           </text>
@@ -891,7 +1038,7 @@ export default function DigitalTwinTab() {
             style={{ ...mono, textTransform: 'uppercase' as const, letterSpacing: '0.1em' }}>
             INJECTION PATTERNS
           </text>
-          <text x={1510} y={68} fill={C.muted} fontSize="9" fontWeight="700"
+          <text x={640} y={400} fill={C.muted} fontSize="9" fontWeight="700"
             style={{ ...mono, textTransform: 'uppercase' as const, letterSpacing: '0.1em' }}>
             PROCESSING &amp; EXPORT
           </text>
@@ -914,9 +1061,9 @@ export default function DigitalTwinTab() {
             stroke={C.green} strokeWidth={4} opacity={0.15} />
           <line x1={390} y1={340} x2={1460} y2={340}
             className="twin-edge-anim" stroke={C.green} strokeWidth={4} />
-          {/* Gathering header → CPF inlet */}
-          <path d="M 1460 340 H 1564 V 366" className="twin-edge-track" stroke={C.green} />
-          <path d="M 1460 340 H 1564 V 366" className="twin-edge-anim" stroke={C.green} />
+          {/* Gathering header → CPF inlet (drops down from centre) */}
+          <path d="M 920 340 V 406" className="twin-edge-track" stroke={C.green} />
+          <path d="M 920 340 V 406" className="twin-edge-anim" stroke={C.green} />
           <text x={394} y={334} fill={C.green} fontSize="7" fontWeight="600" style={mono}>
             PRODUCTION GATHERING HEADER
           </text>
@@ -1066,8 +1213,8 @@ export default function DigitalTwinTab() {
           {/* ============================================================ */}
           {cpf && (
             <SeparatorSVG
-              x={1510}
-              y={380}
+              x={750}
+              y={420}
               fac={cpf}
               isSelected={selected?.kind === 'facility' && selected.data.id === cpf.id}
               onClick={() => setSelected(
@@ -1080,13 +1227,13 @@ export default function DigitalTwinTab() {
           {/* ============================================================ */}
           {/*  FLARE STACKS — connected to parent facilities               */}
           {/* ============================================================ */}
-          {/* FLR-01: connected to CPF gas nozzle */}
+          {/* FLR-01: CPF gas flare — right of wells */}
           {data.flares.filter((f) => f.id === 'FLR-01').map((flr) => (
             <g key={flr.id}>
-              <path d="M 1738 366 H 1810 V 361" className="twin-edge-track" stroke={C.red} />
-              <path d="M 1738 366 H 1810 V 361" className="twin-edge-anim" stroke={C.red} />
+              <path d="M 972 408 H 1500 V 160 H 1540" className="twin-edge-track" stroke={C.red} />
+              <path d="M 972 408 H 1500 V 160 H 1540" className="twin-edge-anim" stroke={C.red} />
               <FlareStackSVG
-                x={1810} y={295}
+                x={1540} y={95}
                 flare={flr}
                 isSelected={selected?.kind === 'flare' && selected.data.id === flr.id}
                 onClick={() => setSelected(
@@ -1096,13 +1243,13 @@ export default function DigitalTwinTab() {
               />
             </g>
           ))}
-          {/* FLR-02: connected to CO2R vent */}
+          {/* FLR-02: CO2R vent flare — right of wells below FLR-01 */}
           {data.flares.filter((f) => f.id === 'FLR-02').map((flr) => (
             <g key={flr.id}>
-              <path d="M 1605 515 H 1648 V 446" className="twin-edge-track" stroke={C.orange} />
-              <path d="M 1605 515 H 1648 V 446" className="twin-edge-anim" stroke={C.orange} />
+              <path d="M 575 560 H 540 V 740 H 1540 V 280" className="twin-edge-track" stroke={C.orange} />
+              <path d="M 575 560 H 540 V 740 H 1540 V 280" className="twin-edge-anim" stroke={C.orange} />
               <FlareStackSVG
-                x={1648} y={380}
+                x={1540} y={210}
                 flare={flr}
                 isSelected={selected?.kind === 'flare' && selected.data.id === flr.id}
                 onClick={() => setSelected(
@@ -1118,8 +1265,8 @@ export default function DigitalTwinTab() {
           {/* ============================================================ */}
           {co2r && (
             <RecycleTowerSVG
-              x={1580}
-              y={520}
+              x={550}
+              y={590}
               fac={co2r}
               isSelected={selected?.kind === 'facility' && selected.data.id === co2r.id}
               onClick={() => setSelected(
@@ -1129,19 +1276,19 @@ export default function DigitalTwinTab() {
             />
           )}
 
-          {/* CPF → CO₂ Recycle Tower (orthogonal: gas nozzle → tower inlet) */}
-          <path d="M 1738 366 V 430 H 1642 V 583" className="twin-edge-track" stroke={C.cyan} />
-          <path d="M 1738 366 V 430 H 1642 V 583" className="twin-edge-anim" stroke={C.cyan} />
-          <GateValveSVG x={1690} y={430} color={C.cyan} />
-          <text x={1694} y={426} fill={C.cyan} fontSize="7" style={mono}>TO CO&#x2082; RECYCLE</text>
+          {/* CPF → CO₂ Recycle Tower */}
+          <path d="M 848 520 V 560 H 612 V 653" className="twin-edge-track" stroke={C.cyan} />
+          <path d="M 848 520 V 560 H 612 V 653" className="twin-edge-anim" stroke={C.cyan} />
+          <GateValveSVG x={730} y={560} color={C.cyan} />
+          <text x={734} y={556} fill={C.cyan} fontSize="7" style={mono}>TO CO&#x2082; RECYCLE</text>
 
-          {/* CO₂ Recycle → Compressor (recycle loop along bottom) */}
-          <path d="M 1605 665 V 700 H 358 V 520"
+          {/* CO₂ Recycle → Compressor (recycle loop) */}
+          <path d="M 575 735 V 755 H 358 V 520"
             className="twin-edge-track" stroke={C.cyan} strokeDasharray="6 3" />
-          <path d="M 1605 665 V 700 H 358 V 520"
+          <path d="M 575 735 V 755 H 358 V 520"
             className="twin-edge-anim" stroke={C.cyan} />
-          <GateValveSVG x={952} y={700} color={C.cyan} />
-          <text x={780} y={692} fill={C.cyan} fontSize="9" fontWeight="600" opacity={0.7} style={mono}>
+          <GateValveSVG x={466} y={755} color={C.cyan} />
+          <text x={380} y={748} fill={C.cyan} fontSize="9" fontWeight="600" opacity={0.7} style={mono}>
             CO&#x2082; RECYCLE LOOP
           </text>
 
@@ -1150,8 +1297,8 @@ export default function DigitalTwinTab() {
           {/* ============================================================ */}
           {swd && (
             <SWDSVG
-              x={1680}
-              y={690}
+              x={1050}
+              y={600}
               fac={swd}
               isSelected={selected?.kind === 'facility' && selected.data.id === swd.id}
               onClick={() => setSelected(
@@ -1161,18 +1308,18 @@ export default function DigitalTwinTab() {
             />
           )}
 
-          {/* CPF → SWD water line (orthogonal) */}
-          <path d="M 1608 480 V 715 H 1670" className="twin-edge-track" stroke={C.blue} />
-          <path d="M 1608 480 V 715 H 1670" className="twin-edge-anim" stroke={C.blue} />
-          <GateValveSVG x={1608} y={597} color={C.blue} />
-          <text x={1612} y={593} fill={C.blue} fontSize="7" style={mono}>WATER TO SWD</text>
+          {/* CPF → SWD water line */}
+          <path d="M 932 520 V 625 H 1040" className="twin-edge-track" stroke={C.blue} />
+          <path d="M 932 520 V 625 H 1040" className="twin-edge-anim" stroke={C.blue} />
+          <GateValveSVG x={986} y={625} color={C.blue} />
+          <text x={940} y={618} fill={C.blue} fontSize="7" style={mono}>WATER TO SWD</text>
 
           {/* W-SWD01 — standalone disposal wellhead near SWD */}
           {swdWell && (() => {
             const isWellSel = selected?.kind === 'well' && selected.data.id === swdWell.id;
             return (
               <WellheadSVG
-                x={1846} y={668} well={swdWell} isSelected={isWellSel}
+                x={1230} y={580} well={swdWell} isSelected={isWellSel}
                 onClick={() => setSelected(isWellSel ? null : { kind: 'well', data: swdWell })}
               />
             );
@@ -1187,14 +1334,14 @@ export default function DigitalTwinTab() {
             return (
               <g key={pl.id} onClick={() => setSelected(isSel ? null : { kind: 'pipeline', data: pl })}
                 style={{ cursor: 'pointer' }}>
-                <path d="M 1692 480 H 1890" className="twin-edge-track" stroke={C.green}
+                <path d="M 848 520 V 540 H 1480" className="twin-edge-track" stroke={C.green}
                   strokeWidth={isSel ? 3 : 2} opacity={isSel ? 0.4 : 0.15} />
-                <path d="M 1692 480 H 1890" className="twin-edge-anim" stroke={C.green}
+                <path d="M 848 520 V 540 H 1480" className="twin-edge-anim" stroke={C.green}
                   strokeWidth={isSel ? 3.5 : 2.5} opacity={isSel ? 1 : 0.7} />
-                <GateValveSVG x={1791} y={480} color={C.green} />
-                <polygon points="1882,475 1890,480 1882,485" fill={C.green} opacity={0.6} />
-                <text x={1780} y={474} textAnchor="middle" fill={C.green} fontSize="7" fontWeight="600" style={mono}>
-                  OIL {pl.currentFlow.toLocaleString()}/{pl.capacity.toLocaleString()}
+                <GateValveSVG x={1260} y={540} color={C.green} />
+                <polygon points="1472,535 1480,540 1472,545" fill={C.green} opacity={0.6} />
+                <text x={1360} y={534} textAnchor="middle" fill={C.green} fontSize="7" fontWeight="600" style={mono}>
+                  OIL EXPORT {pl.currentFlow.toLocaleString()}/{pl.capacity.toLocaleString()}
                 </text>
               </g>
             );
@@ -1206,14 +1353,14 @@ export default function DigitalTwinTab() {
             return (
               <g key={pl.id} onClick={() => setSelected(isSel ? null : { kind: 'pipeline', data: pl })}
                 style={{ cursor: 'pointer' }}>
-                <path d="M 1738 366 V 340 H 1890" className="twin-edge-track" stroke={C.red}
+                <path d="M 972 408 V 450 H 1480" className="twin-edge-track" stroke={C.red}
                   strokeWidth={isSel ? 3 : 2} opacity={isSel ? 0.4 : 0.15} />
-                <path d="M 1738 366 V 340 H 1890" className="twin-edge-anim" stroke={C.red}
+                <path d="M 972 408 V 450 H 1480" className="twin-edge-anim" stroke={C.red}
                   strokeWidth={isSel ? 3.5 : 2.5} opacity={isSel ? 1 : 0.7} />
-                <GateValveSVG x={1814} y={340} color={C.red} />
-                <polygon points="1882,335 1890,340 1882,345" fill={C.red} opacity={0.6} />
-                <text x={1800} y={334} textAnchor="middle" fill={C.red} fontSize="7" fontWeight="600" style={mono}>
-                  GAS {pl.currentFlow.toLocaleString()}/{pl.capacity.toLocaleString()}
+                <GateValveSVG x={1260} y={450} color={C.red} />
+                <polygon points="1472,445 1480,450 1472,455" fill={C.red} opacity={0.6} />
+                <text x={1360} y={444} textAnchor="middle" fill={C.red} fontSize="7" fontWeight="600" style={mono}>
+                  GAS EXPORT {pl.currentFlow.toLocaleString()}/{pl.capacity.toLocaleString()}
                 </text>
               </g>
             );
@@ -1253,8 +1400,8 @@ export default function DigitalTwinTab() {
           {/* ============================================================ */}
           {/*  LEGEND                                                       */}
           {/* ============================================================ */}
-          <g transform={`translate(20, 820)`}>
-            <rect x={0} y={0} width={1860} height={64} rx={6}
+          <g transform={`translate(20, 760)`}>
+            <rect x={0} y={0} width={1560} height={44} rx={6}
               fill={C.panel} stroke={C.border} strokeWidth={0.8} />
             <text x={12} y={16} fill={C.muted} fontSize="8" fontWeight="700" style={mono}>
               WELL TYPES

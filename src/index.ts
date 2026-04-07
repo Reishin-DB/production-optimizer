@@ -7,6 +7,7 @@ import commercialRouter from './routes/commercial';
 import mapRouter from './routes/map';
 import agentRouter from './routes/agent';
 import shiftRouter from './routes/shift';
+import productionRouter from './routes/production';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +21,7 @@ app.use('/api/commercial', commercialRouter);
 app.use('/api/map', mapRouter);
 app.use('/api/agent', agentRouter);
 app.use('/api/shift', shiftRouter);
+app.use('/api/production', productionRouter);
 
 // Serve UI in production
 const uiDist = path.join(__dirname, '..', 'ui', 'dist');

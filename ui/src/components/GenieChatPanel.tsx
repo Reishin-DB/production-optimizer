@@ -5,6 +5,33 @@ import { useState, useRef, useEffect } from 'react';
    Keyword chips + text input drive the same walkthrough flow.
    ================================================================ */
 
+/** Sanitize HTML — allow only safe tags, strip scripts and event handlers. */
+function sanitizeHtml(html: string): string {
+  const ALLOWED_TAGS = /^(b|i|em|strong|br|p|ul|ol|li|span|div|sub|sup|a|code|pre|table|tr|td|th|thead|tbody|h[1-6])$/i;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  // Remove script tags and event handlers
+  const walk = (node: Element) => {
+    for (let i = node.children.length - 1; i >= 0; i--) {
+      const child = node.children[i];
+      if (!ALLOWED_TAGS.test(child.tagName)) {
+        child.remove();
+        continue;
+      }
+      // Strip event handler attributes
+      for (let j = child.attributes.length - 1; j >= 0; j--) {
+        const attr = child.attributes[j].name.toLowerCase();
+        if (attr.startsWith('on') || attr === 'href' && child.getAttribute('href')?.startsWith('javascript:')) {
+          child.removeAttribute(child.attributes[j].name);
+        }
+      }
+      walk(child);
+    }
+  };
+  walk(tmp);
+  return tmp.innerHTML;
+}
+
 interface ChatMessage {
   role: 'user' | 'genie' | 'agent' | 'system';
   content: string;
@@ -276,7 +303,7 @@ export default function GenieChatPanel() {
               <div className="chat-msg-label" style={{ color: labelColor }}>
                 {label}
               </div>
-              <div dangerouslySetInnerHTML={{ __html: msg.content }} />
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.content) }} />
             </div>
           );
         })}

@@ -12,7 +12,15 @@ import productionRouter from './routes/production';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://production-optimizer-7474647106303257.aws.databricksapps.com',
+    /^https:\/\/.*\.cloud\.databricks\.com$/,
+    'http://localhost:5173', // dev
+    'http://localhost:3001', // dev
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 app.use(attachDemoUser);
 

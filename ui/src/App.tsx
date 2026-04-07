@@ -73,9 +73,9 @@ export interface TwinState {
 /* ------------------------------------------------------------------ */
 
 const TABS = [
-  { id: 'optimizer', label: 'Production Optimizer' },
   { id: 'field', label: 'Field Overview' },
   { id: 'twin', label: 'Digital Twin' },
+  { id: 'optimizer', label: 'Production Optimizer' },
   { id: 'dataflow', label: 'Data & AI Flow' },
 ] as const;
 
@@ -86,7 +86,7 @@ type TabId = (typeof TABS)[number]['id'];
 /* ------------------------------------------------------------------ */
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('optimizer');
+  const [activeTab, setActiveTab] = useState<TabId>('field');
   const [twinState, setTwinState] = useState<TwinState | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [shiftLabel, setShiftLabel] = useState<string>('');

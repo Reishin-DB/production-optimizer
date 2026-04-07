@@ -1804,6 +1804,154 @@ body,
   margin-top: 2px;
 }
 
+/* ── Deep Dive ── */
+
+.deep-dive-list { overflow-x: auto; }
+
+.dd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dd-table th {
+  text-align: left;
+  padding: 8px 10px;
+  color: #8b949e;
+  border-bottom: 1px solid #30363d;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.dd-table td {
+  padding: 10px 10px;
+  color: #e6edf3;
+  border-bottom: 1px solid #21262d;
+  font-family: 'SF Mono', monospace;
+  font-size: 12px;
+}
+
+.dd-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.dd-row:hover { background: #1c2129; }
+
+.health-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 70px;
+}
+
+.health-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: #21262d;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.health-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.health-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'SF Mono', monospace;
+  min-width: 20px;
+}
+
+/* Deep Dive detail */
+
+.deep-dive-detail {
+  max-width: 900px;
+}
+
+.dd-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.dd-well-name {
+  font-size: 20px;
+  color: #e6edf3;
+  margin: 0 0 4px 0;
+}
+
+.dd-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.stat-warn {
+  border-color: #da3633 !important;
+}
+
+.stat-warn .stat-value {
+  color: #f85149;
+}
+
+.dd-chart-section {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.dd-chart-section h4 {
+  font-size: 12px;
+  color: #8b949e;
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.dd-chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dd-chart-row .dd-chart-section {
+  margin-bottom: 0;
+}
+
+.dd-params {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.dd-params h4 {
+  font-size: 12px;
+  color: #8b949e;
+  margin: 0 0 8px 0;
+}
+
+.dd-params-row {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  font-family: 'SF Mono', monospace;
+  color: #e6edf3;
+}
+
+.dd-params-row sub { font-size: 9px; }
+
 /* ── Optimize View ── */
 
 .optimize-view {
@@ -1924,7 +2072,144 @@ body,
   text-align: center;
 }
 
-/* ── Recommendations View ── */
+/* ── Actions View (hero) ── */
+
+.agent-intro {
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(0, 212, 170, 0.06);
+  border: 1px solid rgba(0, 212, 170, 0.18);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  line-height: 1.7;
+  font-size: 14px;
+  color: var(--text-secondary, #8b949e);
+}
+
+.agent-intro strong {
+  color: var(--text-primary, #e6edf3);
+}
+
+.agent-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 212, 170, 0.15);
+  color: #00d4aa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.agent-message {
+  flex: 1;
+}
+
+.actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-card {
+  display: flex;
+  gap: 14px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 16px;
+  border-left: 4px solid #8b949e;
+}
+
+.action-high { border-left-color: #f85149; }
+.action-medium { border-left-color: #d29922; }
+.action-low { border-left-color: #3fb950; }
+
+.action-rank {
+  font-size: 20px;
+  font-weight: 800;
+  color: #30363d;
+  font-family: 'SF Mono', monospace;
+  min-width: 32px;
+  text-align: center;
+  padding-top: 2px;
+}
+
+.action-body {
+  flex: 1;
+}
+
+.action-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.action-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e6edf3;
+  margin: 0;
+}
+
+.action-desc {
+  font-size: 13px;
+  color: #8b949e;
+  line-height: 1.6;
+  margin: 0 0 12px 0;
+}
+
+.action-numbers {
+  display: flex;
+  gap: 20px;
+}
+
+.action-number {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action-number-label {
+  font-size: 9px;
+  color: #6e7681;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.action-number-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: 'SF Mono', monospace;
+  color: #e6edf3;
+}
+
+.action-physics {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.action-physics summary {
+  cursor: pointer;
+  color: #58a6ff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.action-physics p {
+  margin: 6px 0 0;
+  line-height: 1.6;
+  padding-left: 12px;
+  border-left: 2px solid #21262d;
+}
+
+/* ── Recommendations View (legacy) ── */
 
 .recs-summary {
   display: flex;

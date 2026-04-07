@@ -112,78 +112,270 @@ function DeclineChart({ curve, large }: { curve: DeclineCurve; large?: boolean }
 }
 
 /* ------------------------------------------------------------------ */
-/*  Sub-tab: Wells                                                     */
+/*  Multi-stream SVG chart                                             */
 /* ------------------------------------------------------------------ */
 
-function WellsView({ curves }: { curves: DeclineCurve[] }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const sel = selected ? curves.find(c => c.wellId === selected) : null;
+interface StreamChartProps {
+  data: Array<Record<string, number>>;
+  streams: Array<{ key: string; color: string; label: string }>;
+  yLabel: string;
+  height?: number;
+}
+
+function StreamChart({ data, streams, yLabel, height = 160 }: StreamChartProps) {
+  if (data.length < 2) return null;
+  const W = 600, H = height;
+  const pad = { top: 10, right: 12, bottom: 22, left: 48 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  let maxVal = 0;
+  for (const d of data) for (const s of streams) maxVal = Math.max(maxVal, d[s.key] || 0);
+  maxVal *= 1.1 || 1;
+
+  const x = (i: number) => pad.left + (i / (data.length - 1)) * cw;
+  const y = (v: number) => pad.top + ch - (v / maxVal) * ch;
 
   return (
-    <div className="wells-view">
-      {sel ? (
-        /* ── Detail view ── */
-        <div className="well-detail-view">
-          <button className="back-btn" onClick={() => setSelected(null)}>← All Wells</button>
-          <div className="well-detail-header">
-            <h3>{sel.wellName}</h3>
-            <span className={`decline-type type-${sel.declineType}`}>{sel.declineType}</span>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+      {[0.25, 0.5, 0.75].map(f => (
+        <line key={f} x1={pad.left} y1={y(maxVal * f)} x2={W - pad.right} y2={y(maxVal * f)}
+          stroke="#1e293b" strokeWidth={0.5} />
+      ))}
+      {streams.map(s => {
+        const pts = data.map((d, i) => `${x(i)},${y(d[s.key] || 0)}`).join(' ');
+        return <polyline key={s.key} points={pts} fill="none" stroke={s.color} strokeWidth={1.5} opacity={0.85} />;
+      })}
+      <text x={2} y={H / 2} fill="#64748b" fontSize={8} fontFamily="monospace"
+        transform={`rotate(-90, 2, ${H / 2})`} textAnchor="middle">{yLabel}</text>
+      {/* Legend */}
+      {streams.map((s, i) => (
+        <g key={s.key} transform={`translate(${pad.left + i * 90}, ${H - 3})`}>
+          <line x1={0} y1={-3} x2={12} y2={-3} stroke={s.color} strokeWidth={2} />
+          <text x={15} y={0} fill="#64748b" fontSize={8} fontFamily="monospace">{s.label}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Trend arrow helper                                                 */
+/* ------------------------------------------------------------------ */
+
+function TrendArrow({ trend }: { trend: string }) {
+  if (trend === 'rising') return <span style={{ color: '#f85149' }}>↑</span>;
+  if (trend === 'falling') return <span style={{ color: '#3fb950' }}>↓</span>;
+  return <span style={{ color: '#6e7681' }}>→</span>;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Health bar                                                         */
+/* ------------------------------------------------------------------ */
+
+function HealthBar({ score }: { score: number }) {
+  const color = score >= 80 ? '#3fb950' : score >= 60 ? '#d29922' : '#f85149';
+  return (
+    <div className="health-bar-wrap">
+      <div className="health-bar-bg">
+        <div className="health-bar-fill" style={{ width: `${score}%`, background: color }} />
+      </div>
+      <span className="health-bar-label" style={{ color }}>{score}</span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sub-tab: Deep Dive (Well Analytics)                                */
+/* ------------------------------------------------------------------ */
+
+interface WellAnalyticsData {
+  wellId: string; wellName: string;
+  declineParams: { qi: number; Di: number; b: number };
+  declineType: string; r2: number; eur: number; remainingReserves: number;
+  currentRate: number; expectedRate: number; performanceGap: number;
+  healthScore: number;
+  waterCutTrend: string; co2Trend: string; pressureTrend: string;
+  history: Array<Record<string, number>>;
+  forecast: Array<Record<string, number>>;
+}
+
+function WellsView() {
+  const [wells, setWells] = useState<WellAnalyticsData[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/production/well-analytics').then(r => r.json())
+      .then(d => { setWells(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="opt-empty">Loading well analytics...</div>;
+
+  const sel = selected ? wells.find(w => w.wellId === selected) : null;
+
+  if (sel) {
+    return (
+      <div className="deep-dive-detail">
+        <button className="back-btn" onClick={() => setSelected(null)}>← All Wells</button>
+
+        {/* Header */}
+        <div className="dd-header">
+          <div>
+            <h3 className="dd-well-name">{sel.wellName}</h3>
+            <span className={`decline-type type-${sel.declineType}`}>{sel.declineType} decline</span>
           </div>
-          <DeclineChart curve={sel} large />
-          <div className="well-detail-stats">
-            <div className="stat">
-              <span className="stat-label">Initial Rate</span>
-              <span className="stat-value">{sel.params.qi.toFixed(0)} <small>bbl/d</small></span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Decline Rate</span>
-              <span className="stat-value">{(sel.params.Di * 100).toFixed(1)} <small>%/mo</small></span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">b-factor</span>
-              <span className="stat-value">{sel.params.b.toFixed(3)}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">R²</span>
-              <span className="stat-value">{sel.r2.toFixed(3)}</span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">EUR</span>
-              <span className="stat-value">{(sel.eur / 1000).toFixed(0)} <small>K bbl</small></span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Remaining</span>
-              <span className="stat-value">{(sel.remainingReserves / 1000).toFixed(0)} <small>K bbl</small></span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Current Rate</span>
-              <span className="stat-value">{sel.history[sel.history.length - 1]?.actual.toFixed(0)} <small>bbl/d</small></span>
-            </div>
-            <div className="stat">
-              <span className="stat-label">Months On</span>
-              <span className="stat-value">{sel.history.length}</span>
-            </div>
+          <HealthBar score={sel.healthScore} />
+        </div>
+
+        {/* KPI row */}
+        <div className="dd-kpis">
+          <div className="stat">
+            <span className="stat-label">Current Rate</span>
+            <span className="stat-value">{sel.currentRate.toFixed(0)} <small>bbl/d</small></span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">Expected</span>
+            <span className="stat-value">{sel.expectedRate.toFixed(0)} <small>bbl/d</small></span>
+          </div>
+          <div className={`stat ${sel.performanceGap < 0 ? 'stat-warn' : ''}`}>
+            <span className="stat-label">Gap</span>
+            <span className="stat-value">{sel.performanceGap >= 0 ? '+' : ''}{sel.performanceGap.toFixed(1)} <small>bbl/d</small></span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">EUR</span>
+            <span className="stat-value">{(sel.eur / 1000).toFixed(0)} <small>K bbl</small></span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">Remaining</span>
+            <span className="stat-value">{(sel.remainingReserves / 1000).toFixed(0)} <small>K bbl</small></span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">R²</span>
+            <span className="stat-value">{sel.r2.toFixed(3)}</span>
           </div>
         </div>
-      ) : (
-        /* ── Grid view ── */
-        <div className="wells-grid">
-          {curves.map(curve => (
-            <div key={curve.wellId} className="well-card" onClick={() => setSelected(curve.wellId)}>
-              <div className="decline-header">
-                <span className="decline-well">{curve.wellName}</span>
-                <span className={`decline-type type-${curve.declineType}`}>{curve.declineType}</span>
-              </div>
-              <DeclineChart curve={curve} />
-              <div className="well-card-footer">
-                <span>{curve.history[curve.history.length - 1]?.actual.toFixed(0)} bbl/d</span>
-                <span>EUR {(curve.eur / 1000).toFixed(0)}K</span>
-                <span>R² {curve.r2.toFixed(3)}</span>
-              </div>
-            </div>
+
+        {/* Production chart: oil actual vs predicted */}
+        <div className="dd-chart-section">
+          <h4>Oil Production — Actual vs Arps Model</h4>
+          <StreamChart
+            data={[...sel.history, ...sel.forecast]}
+            streams={[
+              { key: 'oilRate', color: '#10b981', label: 'Actual' },
+              { key: 'oilPredicted', color: '#3b82f6', label: 'Model' },
+            ]}
+            yLabel="bbl/d"
+            height={180}
+          />
+        </div>
+
+        {/* Multi-stream: gas + water */}
+        <div className="dd-chart-row">
+          <div className="dd-chart-section">
+            <h4>Gas Rate &amp; GOR</h4>
+            <StreamChart
+              data={sel.history}
+              streams={[
+                { key: 'gasRate', color: '#f59e0b', label: 'Gas (mcf/d)' },
+                { key: 'gor', color: '#a855f7', label: 'GOR (scf/bbl)' },
+              ]}
+              yLabel="mcf/d"
+              height={140}
+            />
+          </div>
+          <div className="dd-chart-section">
+            <h4>Water Cut &amp; Water Rate</h4>
+            <StreamChart
+              data={sel.history}
+              streams={[
+                { key: 'waterRate', color: '#3b82f6', label: 'Water (bbl/d)' },
+                { key: 'waterCut', color: '#ef4444', label: 'WC (frac)' },
+              ]}
+              yLabel="bbl/d"
+              height={140}
+            />
+          </div>
+        </div>
+
+        {/* Pressure + CO2 */}
+        <div className="dd-chart-row">
+          <div className="dd-chart-section">
+            <h4>Pressures</h4>
+            <StreamChart
+              data={sel.history}
+              streams={[
+                { key: 'bhp', color: '#ef4444', label: 'BHP' },
+                { key: 'tubingPressure', color: '#10b981', label: 'THP' },
+                { key: 'casingPressure', color: '#f59e0b', label: 'CP' },
+              ]}
+              yLabel="psi"
+              height={140}
+            />
+          </div>
+          <div className="dd-chart-section">
+            <h4>CO₂ Concentration</h4>
+            <StreamChart
+              data={sel.history}
+              streams={[
+                { key: 'co2Concentration', color: '#06b6d4', label: 'CO₂ (mol%)' },
+              ]}
+              yLabel="mol%"
+              height={140}
+            />
+          </div>
+        </div>
+
+        {/* Decline parameters */}
+        <div className="dd-params">
+          <h4>Decline Curve Parameters</h4>
+          <div className="dd-params-row">
+            <span>q<sub>i</sub> = {sel.declineParams.qi.toFixed(0)} bbl/d</span>
+            <span>D<sub>i</sub> = {(sel.declineParams.Di * 100).toFixed(2)}%/month</span>
+            <span>b = {sel.declineParams.b.toFixed(3)}</span>
+            <span>Type: {sel.declineType}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Ranking list
+  return (
+    <div className="deep-dive-list">
+      <table className="dd-table">
+        <thead>
+          <tr>
+            <th>Well</th>
+            <th>Health</th>
+            <th>Rate (bbl/d)</th>
+            <th>Expected</th>
+            <th>Gap</th>
+            <th>EUR (K bbl)</th>
+            <th>Water Cut</th>
+            <th>CO₂</th>
+            <th>Pressure</th>
+          </tr>
+        </thead>
+        <tbody>
+          {wells.map(w => (
+            <tr key={w.wellId} className="dd-row" onClick={() => setSelected(w.wellId)}>
+              <td className="well-name">{w.wellName}</td>
+              <td><HealthBar score={w.healthScore} /></td>
+              <td>{w.currentRate.toFixed(0)}</td>
+              <td>{w.expectedRate.toFixed(0)}</td>
+              <td className={w.performanceGap >= 0 ? 'val-pos' : 'val-neg'}>
+                {w.performanceGap >= 0 ? '+' : ''}{w.performanceGap.toFixed(1)}
+              </td>
+              <td>{(w.eur / 1000).toFixed(0)}</td>
+              <td><TrendArrow trend={w.waterCutTrend} /> {w.waterCutTrend}</td>
+              <td><TrendArrow trend={w.co2Trend} /> {w.co2Trend}</td>
+              <td><TrendArrow trend={w.pressureTrend} /> {w.pressureTrend}</td>
+            </tr>
           ))}
-        </div>
-      )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -375,36 +567,59 @@ function RecommendationsView({ recs }: { recs: RecsResponse | null }) {
   }
 
   return (
-    <div className="recs-view">
-      <div className="recs-summary">
-        <span>{recs.summary.count} actions identified</span>
-        <span className="impact-pos">${(recs.summary.totalAnnualImpact / 1000).toFixed(0)}K/yr total potential</span>
-        <span>{recs.summary.highPriority} high priority</span>
+    <div className="actions-view">
+      {/* Agent intro */}
+      <div className="agent-intro">
+        <div className="agent-icon">AI</div>
+        <div className="agent-message">
+          I've analyzed live SCADA data across <strong>{recs.summary.count} patterns</strong> using
+          Darcy flow, material balance, and decline curve models.
+          Found <strong>{recs.summary.count} optimization actions</strong> worth
+          <strong className="impact-pos"> ${(recs.summary.totalAnnualImpact / 1000).toFixed(0)}K/yr</strong> in
+          combined upside. {recs.summary.highPriority} require immediate attention.
+        </div>
       </div>
-      <div className="recs-list">
-        {recs.recommendations.map(rec => (
-          <div key={rec.id} className={`rec-card rec-${rec.priority}`}>
-            <div className="rec-header">
-              <span className={`priority-badge priority-${rec.priority}`}>{rec.priority}</span>
-              <span className="rec-title">{rec.title}</span>
-              <span className={`rec-revenue ${rec.estimatedImpact.annualRevenue >= 0 ? 'impact-pos' : 'impact-neg'}`}>
-                ${(rec.estimatedImpact.annualRevenue / 1000).toFixed(0)}K/yr
-              </span>
+
+      {/* Action cards */}
+      <div className="actions-list">
+        {recs.recommendations.map((rec, i) => (
+          <div key={rec.id} className={`action-card action-${rec.priority}`}>
+            <div className="action-rank">#{i + 1}</div>
+            <div className="action-body">
+              <div className="action-top">
+                <span className={`priority-badge priority-${rec.priority}`}>{rec.priority}</span>
+                <h4 className="action-title">{rec.title}</h4>
+              </div>
+              <p className="action-desc">{rec.description}</p>
+              <div className="action-numbers">
+                <div className="action-number">
+                  <span className="action-number-label">Annual Impact</span>
+                  <span className={`action-number-value ${rec.estimatedImpact.annualRevenue >= 0 ? 'impact-pos' : 'impact-neg'}`}>
+                    ${(rec.estimatedImpact.annualRevenue / 1000).toFixed(0)}K
+                  </span>
+                </div>
+                <div className="action-number">
+                  <span className="action-number-label">Daily</span>
+                  <span className={`action-number-value ${rec.estimatedImpact.dailyRevenue >= 0 ? 'impact-pos' : 'impact-neg'}`}>
+                    {rec.estimatedImpact.dailyRevenue >= 0 ? '+' : ''}${rec.estimatedImpact.dailyRevenue}
+                  </span>
+                </div>
+                <div className="action-number">
+                  <span className="action-number-label">Oil Change</span>
+                  <span className={`action-number-value ${rec.estimatedImpact.oilRateChange >= 0 ? 'impact-pos' : 'impact-neg'}`}>
+                    {rec.estimatedImpact.oilRateChange >= 0 ? '+' : ''}{rec.estimatedImpact.oilRateChange} bbl/d
+                  </span>
+                </div>
+                <div className="action-number">
+                  <span className="action-number-label">Risk</span>
+                  <span className="action-number-value">{rec.risk.split('—')[0].trim()}</span>
+                </div>
+              </div>
+              <details className="action-physics">
+                <summary>Why — Physics Rationale</summary>
+                <p>{rec.physicsRationale}</p>
+              </details>
             </div>
-            <p className="rec-desc">{rec.description}</p>
-            <div className="rec-metrics">
-              <span className={rec.estimatedImpact.oilRateChange >= 0 ? 'impact-pos' : 'impact-neg'}>
-                {rec.estimatedImpact.oilRateChange >= 0 ? '+' : ''}{rec.estimatedImpact.oilRateChange} bbl/d
-              </span>
-              <span className={rec.estimatedImpact.dailyRevenue >= 0 ? 'impact-pos' : 'impact-neg'}>
-                {rec.estimatedImpact.dailyRevenue >= 0 ? '+' : ''}${rec.estimatedImpact.dailyRevenue}/d
-              </span>
-            </div>
-            <details className="rec-physics">
-              <summary>Physics Rationale</summary>
-              <p>{rec.physicsRationale}</p>
-              <p className="rec-risk"><strong>Risk:</strong> {rec.risk}</p>
-            </details>
           </div>
         ))}
       </div>
@@ -417,15 +632,15 @@ function RecommendationsView({ recs }: { recs: RecsResponse | null }) {
 /* ------------------------------------------------------------------ */
 
 const SUB_TABS = [
-  { id: 'wells', label: 'Wells' },
-  { id: 'optimize', label: 'Optimize' },
-  { id: 'recommendations', label: 'Recommendations' },
+  { id: 'actions', label: 'Actions' },
+  { id: 'wells', label: 'Deep Dive' },
+  { id: 'scenario', label: 'Scenario' },
 ] as const;
 
 type SubTabId = (typeof SUB_TABS)[number]['id'];
 
 export default function ProductionOptimizerTab() {
-  const [subTab, setSubTab] = useState<SubTabId>('wells');
+  const [subTab, setSubTab] = useState<SubTabId>('actions');
   const [curves, setCurves] = useState<DeclineCurve[]>([]);
   const [recs, setRecs] = useState<RecsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -455,7 +670,7 @@ export default function ProductionOptimizerTab() {
             onClick={() => setSubTab(t.id)}
           >
             {t.label}
-            {t.id === 'recommendations' && recs && recs.summary.highPriority > 0 && (
+            {t.id === 'actions' && recs && recs.summary.highPriority > 0 && (
               <span className="sub-tab-badge">{recs.summary.highPriority}</span>
             )}
           </button>
@@ -463,9 +678,9 @@ export default function ProductionOptimizerTab() {
       </nav>
 
       <div className="sub-tab-content">
-        {subTab === 'wells' && <WellsView curves={curves} />}
-        {subTab === 'optimize' && <OptimizeView />}
-        {subTab === 'recommendations' && <RecommendationsView recs={recs} />}
+        {subTab === 'actions' && <RecommendationsView recs={recs} />}
+        {subTab === 'wells' && <WellsView />}
+        {subTab === 'scenario' && <OptimizeView />}
       </div>
     </div>
   );

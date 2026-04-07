@@ -10,9 +10,11 @@ import { InMemoryTwinDataProvider } from '../twin/provider';
 import {
   fitDeclineCurve,
   generateProductionHistory,
+  generateWellAnalytics,
   arpsRate,
   calculateEUR,
   DeclineCurveResult,
+  WellAnalytics,
 } from '../physics/decline';
 import {
   getDefaultReservoirParams,
@@ -110,6 +112,44 @@ router.get('/decline-curves', async (_req: Request, res: Response) => {
   } catch (err) {
     console.error('Decline curve error:', err);
     res.status(500).json({ error: 'Failed to compute decline curves' });
+  }
+});
+
+/**
+ * GET /api/production/well-analytics
+ *
+ * Full multi-stream analytics for all producer wells:
+ * oil, gas, water, pressures, CO2 concentration, water cut, GOR,
+ * health scores, trends, and performance vs model.
+ */
+let analyticsCache: WellAnalytics[] | null = null;
+let analyticsCacheTs = 0;
+
+router.get('/well-analytics', async (_req: Request, res: Response) => {
+  const now = Date.now();
+  if (analyticsCache && now - analyticsCacheTs < CACHE_TTL) {
+    return res.json(analyticsCache);
+  }
+
+  try {
+    const state = await provider.loadState();
+    const producers = state.wells.filter((w: any) => w.type === 'producer');
+
+    const results: WellAnalytics[] = producers.map((well: any, idx: number) => {
+      const monthsOn = 24 + (idx * 3);
+      const seed = well.id.charCodeAt(2) * 1000 + well.id.charCodeAt(3);
+      return generateWellAnalytics(well.id, well.name, well, monthsOn, seed);
+    });
+
+    // Sort by performance gap (worst first)
+    results.sort((a, b) => a.performanceGap - b.performanceGap);
+
+    analyticsCache = results;
+    analyticsCacheTs = now;
+    res.json(results);
+  } catch (err) {
+    console.error('Well analytics error:', err);
+    res.status(500).json({ error: 'Failed to compute well analytics' });
   }
 });
 

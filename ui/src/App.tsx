@@ -3,6 +3,8 @@ import GeospatialTab from './components/GeospatialTab';
 import DataAIFlowTab from './components/DataAIFlowTab';
 import DigitalTwinTab from './components/DigitalTwinTab';
 import ProductionOptimizerTab from './components/ProductionOptimizerTab';
+import AskGeniePage from './components/AskGeniePage';
+import SupervisorTab from './components/SupervisorTab';
 
 /* ------------------------------------------------------------------ */
 /*  Tabs                                                               */
@@ -12,6 +14,8 @@ const TABS = [
   { id: 'field', label: 'Field Overview' },
   { id: 'twin', label: 'Digital Twin' },
   { id: 'optimizer', label: 'Production Optimizer' },
+  { id: 'genie', label: '✨ Ask Genie' },
+  { id: 'supervisor', label: '🧠 Supervisor' },
   { id: 'dataflow', label: 'Data & AI Flow' },
 ] as const;
 
@@ -35,6 +39,10 @@ export default function App() {
         return <DigitalTwinTab />;
       case 'optimizer':
         return <ProductionOptimizerTab />;
+      case 'genie':
+        return <AskGeniePage />;
+      case 'supervisor':
+        return <SupervisorTab />;
       case 'dataflow':
         return <DataAIFlowTab />;
       default:

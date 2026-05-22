@@ -20,5 +20,10 @@ declare global {
         }
     }
 }
+/**
+ * Attach demo user identity. In production, replace with Databricks OAuth
+ * SP identity extraction from the request headers.
+ * Perimeter auth is handled by Databricks Apps OAuth — this is internal role-gating only.
+ */
 export declare function attachDemoUser(req: Request, _res: Response, next: NextFunction): void;
 export declare function requireRole(...roles: string[]): (req: Request, res: Response, next: NextFunction) => any;

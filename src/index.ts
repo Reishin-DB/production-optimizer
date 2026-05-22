@@ -8,6 +8,8 @@ import mapRouter from './routes/map';
 import agentRouter from './routes/agent';
 import shiftRouter from './routes/shift';
 import productionRouter from './routes/production';
+import genieRouter from './routes/genie';
+import supervisorRouter from './routes/supervisor';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -16,11 +18,12 @@ app.use(cors({
   origin: [
     'https://production-optimizer-7474647106303257.aws.databricksapps.com',
     /^https:\/\/.*\.cloud\.databricks\.com$/,
-    'http://localhost:5173', // dev
-    'http://localhost:3001', // dev
+    'http://localhost:5173',
+    'http://localhost:3001',
   ],
   credentials: true,
 }));
+
 app.use(express.json());
 app.use(attachDemoUser);
 
@@ -30,6 +33,8 @@ app.use('/api/map', mapRouter);
 app.use('/api/agent', agentRouter);
 app.use('/api/shift', shiftRouter);
 app.use('/api/production', productionRouter);
+app.use('/api/genie', genieRouter);
+app.use('/api/supervisor', supervisorRouter);
 
 // Serve UI in production
 const uiDist = path.join(__dirname, '..', 'ui', 'dist');

@@ -329,6 +329,13 @@ body,
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  /* 1.5x scale-up for all tabs by default; Digital Twin opts out below. */
+  zoom: 1.5;
+}
+
+/* Digital Twin tab keeps its original sizing (no zoom). */
+.main-content .twin-tab-layout {
+  zoom: calc(1 / 1.5);
 }
 
 /* ---------- Geospatial Tab Layout ---------- */

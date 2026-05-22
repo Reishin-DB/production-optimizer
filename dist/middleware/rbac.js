@@ -13,6 +13,11 @@ exports.ROLES = {
     AI_AGENT_PROD: 'ROLE_AI_AGENT_PROD',
     AI_AGENT_COMM: 'ROLE_AI_AGENT_COMM',
 };
+/**
+ * Attach demo user identity. In production, replace with Databricks OAuth
+ * SP identity extraction from the request headers.
+ * Perimeter auth is handled by Databricks Apps OAuth — this is internal role-gating only.
+ */
 function attachDemoUser(req, _res, next) {
     req.user = {
         id: 'demo-user',
@@ -20,8 +25,6 @@ function attachDemoUser(req, _res, next) {
         roles: [
             exports.ROLES.PROD_ENGINEER,
             exports.ROLES.RESERVOIR_ENGINEER,
-            exports.ROLES.COMMERCIAL_ANALYST,
-            exports.ROLES.SHIFT_SUPERVISOR,
         ],
     };
     next();

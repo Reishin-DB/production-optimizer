@@ -25,6 +25,8 @@ function attachDemoUser(req, _res, next) {
         roles: [
             exports.ROLES.PROD_ENGINEER,
             exports.ROLES.RESERVOIR_ENGINEER,
+            exports.ROLES.COMMERCIAL_ANALYST,
+            exports.ROLES.SHIFT_SUPERVISOR,
         ],
     };
     next();

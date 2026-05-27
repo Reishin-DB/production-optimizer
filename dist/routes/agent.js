@@ -3,48 +3,52 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const rbac_1 = require("../middleware/rbac");
 const provider_1 = require("../twin/provider");
-const economics_1 = require("../commercial/economics");
+const genie_1 = require("./genie");
 const router = (0, express_1.Router)();
 const provider = new provider_1.InMemoryTwinDataProvider();
-// POST /api/agent/query
+const HIDDEN_PROP_KEYS = new Set(['color', 'geometry', 'layerType', '_vectorTileFeature']);
+function describeFeature(f) {
+    const name = f.name || f.id || f.well_id || 'asset';
+    const pairs = Object.entries(f)
+        .filter(([k, v]) => !HIDDEN_PROP_KEYS.has(k) && v !== null && v !== undefined && v !== '' && k !== 'name')
+        .slice(0, 8)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ');
+    return pairs ? `${name} (${pairs})` : name;
+}
+// POST /api/agent/query — delegates to Genie
 router.post('/query', (0, rbac_1.requireRole)(rbac_1.ROLES.PROD_ENGINEER, rbac_1.ROLES.RESERVOIR_ENGINEER, rbac_1.ROLES.COMMERCIAL_ANALYST, rbac_1.ROLES.AI_AGENT_PROD, rbac_1.ROLES.AI_AGENT_COMM), async (req, res) => {
-    const { prompt, selectedEntities, agentRole } = req.body;
+    const { prompt, selectedEntities, conversation_id } = req.body;
     if (!prompt) {
         return res.status(400).json({ error: 'prompt is required' });
     }
-    const state = await provider.loadState();
-    // Gather context for selected entities
-    const entities = selectedEntities ?? [];
-    const relevantWells = state.wells.filter((w) => entities.includes(w.id));
-    const relevantFacilities = state.facilities.filter((f) => entities.includes(f.id));
-    const relevantPatterns = state.patterns.filter((p) => entities.includes(p.id));
-    const relevantAlerts = state.alerts.filter((a) => entities.includes(a.source));
-    // Gather economics if commercial role
-    let economics = null;
-    if (!agentRole || agentRole === 'commercial') {
-        const wellEcon = (0, economics_1.getWellEconomics)(state).filter((e) => entities.includes(e.wellId));
-        const fieldSummary = (0, economics_1.getFieldEconomicsSummary)(state);
-        economics = { wellEcon, fieldSummary };
+    const features = Array.isArray(selectedEntities) ? selectedEntities : [];
+    const contextLine = features.length
+        ? `Context — selected ${features.length === 1 ? 'asset' : 'assets'}: ${features.map(describeFeature).join('; ')}.`
+        : '';
+    const question = contextLine ? `${contextLine}\n\n${prompt.trim()}` : prompt.trim();
+    try {
+        const result = await genie_1.genieClient.askSync(question, conversation_id);
+        const counts = { selected: features.length };
+        if (Array.isArray(result.rows))
+            counts.rows = result.rows.length;
+        res.json({
+            summary: result.text || result.error || 'No response from Genie.',
+            agentRole: 'genie',
+            contextCounts: counts,
+            conversation_id: result.conversation_id,
+            sql: result.sql,
+            columns: result.columns,
+            rows: result.rows,
+        });
     }
-    res.json({
-        summary: 'TODO: Claude API integration — this endpoint will forward the prompt and context to Claude for analysis',
-        prompt,
-        agentRole: agentRole ?? 'general',
-        contextCounts: {
-            wells: relevantWells.length,
-            facilities: relevantFacilities.length,
-            patterns: relevantPatterns.length,
-            alerts: relevantAlerts.length,
-            hasEconomics: economics !== null,
-        },
-        context: {
-            wells: relevantWells,
-            facilities: relevantFacilities,
-            patterns: relevantPatterns,
-            alerts: relevantAlerts,
-            economics,
-        },
-    });
+    catch (e) {
+        console.error('[agent.query] genie error:', e?.message || e);
+        res.status(502).json({
+            summary: `Genie error: ${e?.message || e}`,
+            agentRole: 'genie',
+        });
+    }
 });
 // POST /api/agent/proposal/:id/approve
 router.post('/proposal/:id/approve', (0, rbac_1.requireRole)(rbac_1.ROLES.PROD_ENGINEER, rbac_1.ROLES.SHIFT_SUPERVISOR), async (req, res) => {

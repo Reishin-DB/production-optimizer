@@ -10,6 +10,8 @@ import shiftRouter from './routes/shift';
 import productionRouter from './routes/production';
 import genieRouter from './routes/genie';
 import supervisorRouter from './routes/supervisor';
+import geospatialRouter from './routes/geospatial';
+import modelRouter from './routes/model';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -35,6 +37,8 @@ app.use('/api/shift', shiftRouter);
 app.use('/api/production', productionRouter);
 app.use('/api/genie', genieRouter);
 app.use('/api/supervisor', supervisorRouter);
+app.use('/api/map', geospatialRouter);
+app.use('/api/model', modelRouter);
 
 // Serve UI in production
 const uiDist = path.join(__dirname, '..', 'ui', 'dist');

@@ -8,6 +8,7 @@
 import { Router, Request, Response } from 'express';
 import https from 'https';
 import { URL } from 'url';
+import { currentModel } from './model';
 
 const router = Router();
 
@@ -18,7 +19,6 @@ const CLIENT_SECRET = process.env.DATABRICKS_CLIENT_SECRET || '';
 const WAREHOUSE_ID = process.env.DATABRICKS_WAREHOUSE_ID || '';
 const CATALOG = process.env.DEMO_CATALOG || 'oil_pump_monitor_catalog';
 const SCHEMA = process.env.DEMO_SCHEMA || 'production_optimizer';
-const MODEL = process.env.AGENT_MODEL || 'databricks-claude-sonnet-4-5';
 
 // ── Shared OAuth + HTTP helpers (reuse from genie.ts pattern, but inlined to avoid cycles) ──
 let _token = '';
@@ -45,6 +45,8 @@ function fetchJson(url: string, opts: { method?: string; headers?: Record<string
       });
     });
     req.on('error', reject);
+    // Hard timeout so a slow/cold-starting model endpoint can't hang the SSE run forever.
+    req.setTimeout(75_000, () => { req.destroy(new Error('model request timed out (endpoint slow or cold-starting)')); });
     if (opts.body) req.write(opts.body);
     req.end();
   });
@@ -81,7 +83,7 @@ async function dbxApi(path: string, opts: { method?: string; body?: string } = {
 // ── Claude (Foundation Model API) ────────────────────────────
 async function claudeCall(system: string, user: string, maxTokens = 600): Promise<string> {
   try {
-    const r = await dbxApi(`/serving-endpoints/${MODEL}/invocations`, {
+    const r = await dbxApi(`/serving-endpoints/${currentModel()}/invocations`, {
       method: 'POST',
       body: JSON.stringify({
         messages: [
@@ -92,7 +94,12 @@ async function claudeCall(system: string, user: string, maxTokens = 600): Promis
         temperature: 0.2,
       }),
     });
-    return r?.choices?.[0]?.message?.content || '';
+    // Coerce content to a string. Open models (GPT-OSS, etc.) can return content as
+    // an array of parts or an object; returning that non-string crashes the React UI.
+    const c = r?.choices?.[0]?.message?.content;
+    if (typeof c === 'string') return c;
+    if (Array.isArray(c)) return c.map((p: any) => (typeof p === 'string' ? p : p?.text || '')).join('').trim();
+    return c != null ? String(c) : '';
   } catch (e: any) {
     return `(Claude unavailable: ${e?.message || e})`;
   }
@@ -173,7 +180,7 @@ async function specialistDecline(req: DecideReq, ctx: any) {
   const wellId = req.well_id || (ctx.rec?.affected_entities || '').split(',')[0]?.trim();
   if (!wellId) {
     return { id: 'decline', name: 'Decline Curve Analyst', feature: 'Foundation Model API · Claude',
-             endpoint: MODEL, ms: Date.now() - t0, result: '(no well selected)' };
+             endpoint: currentModel(), ms: Date.now() - t0, result: '(no well selected)' };
   }
   try {
     const { cols, rows } = await runSql(
@@ -182,17 +189,17 @@ async function specialistDecline(req: DecideReq, ctx: any) {
     );
     if (!rows.length) {
       return { id: 'decline', name: 'Decline Curve Analyst', feature: 'Foundation Model API · Claude',
-               endpoint: MODEL, ms: Date.now() - t0, result: `(no decline curve for ${wellId})` };
+               endpoint: currentModel(), ms: Date.now() - t0, result: `(no decline curve for ${wellId})` };
     }
     const facts = fmtRows(cols, rows);
     const system = "You are a reservoir engineer. Given an Arps decline-curve fit for one well, give a 3-line " +
       "assessment: (1) overall confidence, (2) one upside, (3) the biggest risk. Cite the numbers. No preamble.";
     const analysis = await claudeCall(system, facts, 350);
     return { id: 'decline', name: 'Decline Curve Analyst', feature: 'Foundation Model API · Claude',
-             endpoint: MODEL, ms: Date.now() - t0, result: analysis, evidence: facts };
+             endpoint: currentModel(), ms: Date.now() - t0, result: analysis, evidence: facts };
   } catch (e: any) {
     return { id: 'decline', name: 'Decline Curve Analyst', feature: 'Foundation Model API · Claude',
-             endpoint: MODEL, ms: Date.now() - t0, result: `(error: ${e?.message || e})` };
+             endpoint: currentModel(), ms: Date.now() - t0, result: `(error: ${e?.message || e})` };
   }
 }
 
@@ -359,7 +366,7 @@ router.post('/decide', async (req: Request, res: Response) => {
     const verdict = extractVerdict(recText);
     res.write(sseEvent('recommendation', {
       text: recText, verdict, total_ms: Date.now() - t0,
-      rec_id: body.rec_id, well_id: body.well_id,
+      rec_id: body.rec_id, well_id: body.well_id, model: currentModel(),
     }));
     res.write(sseEvent('done', { total_ms: Date.now() - t0 }));
   } catch (e: any) {
@@ -372,9 +379,9 @@ router.post('/decide', async (req: Request, res: Response) => {
 router.get('/info', (_req, res) => {
   res.json({
     name: 'Production Optimizer Approval Supervisor',
-    model: MODEL,
+    model: currentModel(),
     specialists: [
-      { id: 'decline',     name: 'Decline Curve Analyst',     feature: 'Foundation Model API', endpoint: MODEL,                                          desc: 'Claude assesses Arps fit quality and the biggest risk.' },
+      { id: 'decline',     name: 'Decline Curve Analyst',     feature: 'Foundation Model API', endpoint: currentModel(),                                          desc: 'Claude assesses Arps fit quality and the biggest risk.' },
       { id: 'economics',   name: 'Economic Impact Evaluator', feature: 'UC SQL',               endpoint: `${CATALOG}.${SCHEMA}.gold_field_economics`,    desc: 'Per-rec impact + field-level netback / opex / breakeven from governed UC tables.' },
       { id: 'rec_history', name: 'Recommendation History',    feature: 'UC SQL',               endpoint: `${CATALOG}.${SCHEMA}.gold_recommendations`,    desc: 'Past recommendations for the same well, by annual revenue.' },
       { id: 'analog',      name: 'Analog Field Reference',    feature: 'Vector Search',        endpoint: `${CATALOG}.${SCHEMA}.petroleum_documents_vs_index`, desc: 'Curated SPE references (VS index stub).' },

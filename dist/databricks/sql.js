@@ -14,6 +14,17 @@ const SCHEMA = process.env.UC_SCHEMA || '';
 exports.SCHEMA = SCHEMA;
 let _cachedToken = null;
 let _tokenExpiry = 0;
+/**
+ * Normalize the Databricks host. In Databricks Apps, DATABRICKS_HOST is injected
+ * WITHOUT the https:// scheme (e.g. "fevm-oil-pump-monitor.cloud.databricks.com"),
+ * which makes fetch() throw "Invalid URL". Prepend the scheme if missing.
+ */
+function normalizeHost() {
+    const raw = (process.env.DATABRICKS_HOST || process.env.DATABRICKS_INSTANCE_URL || '').replace(/\/$/, '');
+    if (!raw)
+        return '';
+    return raw.startsWith('http') ? raw : `https://${raw}`;
+}
 /** Get OAuth token for the app's service principal */
 async function getToken() {
     const now = Date.now();
@@ -27,7 +38,7 @@ async function getToken() {
         return explicit;
     }
     // Databricks Apps: get token from the managed identity endpoint
-    const host = process.env.DATABRICKS_HOST || '';
+    const host = normalizeHost();
     if (!host)
         throw new Error('NO_HOST');
     // Try the OAuth token endpoint (Databricks Apps provides this)
@@ -59,7 +70,7 @@ async function getToken() {
  * Execute SQL query. Returns rows or throws.
  */
 async function executeQuery(sql) {
-    const host = process.env.DATABRICKS_HOST || process.env.DATABRICKS_INSTANCE_URL || '';
+    const host = normalizeHost();
     if (!host)
         throw new Error('NO_DATABRICKS_HOST');
     const token = await getToken();

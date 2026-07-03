@@ -30,7 +30,7 @@ interface GeoJSONAssets {
 }
 
 interface LayerDef {
-  key: keyof GeoJSONAssets;
+  key: string;
   label: string;
   color: string;
 }
@@ -47,6 +47,8 @@ const LAYERS: LayerDef[] = [
   { key: 'monitoringPoints', label: 'Monitoring', color: '#f59e0b' },
   { key: 'fleet', label: 'Fleet', color: '#8b5cf6' },
   { key: 'flares', label: 'Flares', color: '#f97316' },
+  { key: 'h3', label: 'H3 density', color: '#22d3ee' },
+  { key: 'plume', label: 'CO₂ plume', color: '#f97316' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -148,6 +150,51 @@ function drawMap(
   }
 
   const toXY = (lon: number, lat: number) => lonLatToPixel(lon, lat, view, w, h);
+
+  // --- H3 hexes (choropleth by avg oil) — real Databricks h3_boundaryasgeojson ---
+  const h3fc = (assets as any).__h3 as { features: any[] } | undefined;
+  if (visibility.h3 && h3fc?.features?.length) {
+    let maxOil = 1;
+    for (const f of h3fc.features) maxOil = Math.max(maxOil, f.properties?.avg_oil || 0);
+    for (const f of h3fc.features) {
+      const ring = f.geometry?.coordinates?.[0] as number[][];
+      if (!ring || ring.length < 3) continue;
+      const t = Math.max(0, Math.min(1, (f.properties?.avg_oil || 0) / maxOil));
+      // blue → cyan → amber ramp
+      const r = Math.round(40 + t * 205), g = Math.round(120 + t * 90), b = Math.round(200 - t * 150);
+      ctx.beginPath();
+      const [sx, sy] = toXY(ring[0][0], ring[0][1]);
+      ctx.moveTo(sx, sy);
+      for (let i = 1; i < ring.length; i++) { const [x, y] = toXY(ring[i][0], ring[i][1]); ctx.lineTo(x, y); }
+      ctx.closePath();
+      ctx.fillStyle = `rgba(${r},${g},${b},0.30)`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(${r},${g},${b},0.85)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // --- CO2 plume polygons — ST_Contains front producers ---
+  const plfc = (assets as any).__plumes as { features: any[] } | undefined;
+  if (visibility.plume && plfc?.features?.length) {
+    for (const f of plfc.features) {
+      const ring = f.geometry?.coordinates?.[0] as number[][];
+      if (!ring || ring.length < 3) continue;
+      ctx.beginPath();
+      const [sx, sy] = toXY(ring[0][0], ring[0][1]);
+      ctx.moveTo(sx, sy);
+      for (let i = 1; i < ring.length; i++) { const [x, y] = toXY(ring[i][0], ring[i][1]); ctx.lineTo(x, y); }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(249, 115, 22, 0.16)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(249, 115, 22, 0.7)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
 
   // --- Pipelines ---
   if (visibility.pipelines && assets.pipelines) {
@@ -400,6 +447,121 @@ function hitTest(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Spatial SQL (GA) overlay                                           */
+/* ------------------------------------------------------------------ */
+
+interface SpatialQueryResult {
+  key: string;
+  title: string;
+  description: string;
+  sql: string;
+  rows: Record<string, unknown>[];
+  error: string | null;
+}
+
+function SpatialSQLPanel() {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<SpatialQueryResult[]>([]);
+  const [fns, setFns] = useState<string[]>([]);
+  const [active, setActive] = useState<string>('');
+  const [err, setErr] = useState<string>('');
+
+  useEffect(() => {
+    if (!open || results.length || loading) return;
+    setLoading(true);
+    fetch('/api/map/geospatial/spatial-sql')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) { setErr(d.error); return; }
+        setResults(d.results || []);
+        setFns(d.functions || []);
+        setActive((d.results || [])[0]?.key || '');
+      })
+      .catch((e) => setErr(String(e)))
+      .finally(() => setLoading(false));
+  }, [open, results.length, loading]);
+
+  const cur = results.find((r) => r.key === active);
+  const cols = cur && cur.rows.length ? Object.keys(cur.rows[0]) : [];
+
+  return (
+    <div className="spatial-sql-panel" style={{
+      position: 'absolute', left: 12, bottom: 12, zIndex: 20,
+      width: open ? 560 : 'auto', maxWidth: 'calc(100% - 24px)',
+      background: 'rgba(11,15,26,0.94)', border: '1px solid #1E2D4F',
+      borderRadius: 8, boxShadow: '0 6px 24px rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+    }}>
+      <div onClick={() => setOpen((v) => !v)} style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer',
+        borderBottom: open ? '1px solid #1E2D4F' : 'none',
+      }}>
+        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#22d3ee' }} />
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: '#E8EDF5' }}>Spatial SQL · GA</span>
+        <span style={{ fontSize: 10, color: '#64748B' }}>H3 + ST_ on Databricks</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94A3B8' }}>{open ? '▾' : '▸'}</span>
+      </div>
+
+      {open && (
+        <div style={{ padding: 12 }}>
+          {loading && <div style={{ fontSize: 12, color: '#94A3B8' }}>Running spatial queries…</div>}
+          {err && <div style={{ fontSize: 12, color: '#f87171' }}>{err}</div>}
+          {!loading && !err && (
+            <>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                {results.map((r) => (
+                  <button key={r.key} onClick={() => setActive(r.key)} style={{
+                    fontSize: 11, padding: '4px 10px', borderRadius: 4, cursor: 'pointer',
+                    background: active === r.key ? '#22d3ee22' : '#111827',
+                    color: active === r.key ? '#22d3ee' : '#94A3B8',
+                    border: `1px solid ${active === r.key ? '#22d3ee55' : '#1E2D4F'}`,
+                  }}>{r.title}</button>
+                ))}
+              </div>
+              {cur && (
+                <>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 8 }}>{cur.description}</div>
+                  <pre style={{
+                    fontFamily: 'monospace', fontSize: 10.5, color: '#cbd5e1', background: '#0F1524',
+                    border: '1px solid #1E2D4F', borderRadius: 6, padding: '8px 10px', margin: 0,
+                    whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto',
+                  }}>{cur.sql}</pre>
+                  {cur.error ? (
+                    <div style={{ fontSize: 11, color: '#f87171', marginTop: 8 }}>{cur.error}</div>
+                  ) : (
+                    <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                        <thead>
+                          <tr>{cols.map((c) => (
+                            <th key={c} style={{ textAlign: 'left', color: '#64748B', fontWeight: 600, padding: '3px 6px', borderBottom: '1px solid #1E2D4F', fontFamily: 'monospace' }}>{c}</th>
+                          ))}</tr>
+                        </thead>
+                        <tbody>
+                          {cur.rows.slice(0, 12).map((row, i) => (
+                            <tr key={i}>{cols.map((c) => (
+                              <td key={c} style={{ color: '#CBD5E1', padding: '3px 6px', fontFamily: 'monospace' }}>{String(row[c])}</td>
+                            ))}</tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+              {fns.length > 0 && (
+                <div style={{ fontSize: 10, color: '#64748B', marginTop: 10, fontFamily: 'monospace' }}>
+                  functions: {fns.join(' · ')}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -418,7 +580,7 @@ export default function GeospatialTab() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [layerPanelOpen, setLayerPanelOpen] = useState(true);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(LAYERS.map((l) => [l.key, true]))
+    Object.fromEntries(LAYERS.map((l) => [l.key, l.key !== 'h3' && l.key !== 'plume']))
   );
   const layerVisRef = useRef(layerVisibility);
   const [layerCounts, setLayerCounts] = useState<Record<string, number>>({});
@@ -474,8 +636,19 @@ export default function GeospatialTab() {
 
         const counts: Record<string, number> = {};
         for (const l of LAYERS) {
-          counts[l.key] = data[l.key]?.features?.length ?? 0;
+          counts[l.key] = (data as any)[l.key]?.features?.length ?? 0;
         }
+
+        // Real Databricks spatial layers (H3 + ST_ from the SQL warehouse)
+        try {
+          const [h3r, plr] = await Promise.all([
+            fetch('/api/map/geospatial/h3-hexes').then((r) => (r.ok ? r.json() : null)),
+            fetch('/api/map/geospatial/plumes').then((r) => (r.ok ? r.json() : null)),
+          ]);
+          if (h3r?.features) { (assetsRef.current as any).__h3 = h3r; counts['h3'] = h3r.features.length; }
+          if (plr?.features) { (assetsRef.current as any).__plumes = plr; counts['plume'] = plr.features.length; }
+        } catch { /* spatial layers optional */ }
+
         setLayerCounts(counts);
         setAssetsLoaded(true);
       } catch {
@@ -610,6 +783,9 @@ export default function GeospatialTab() {
         >
           {panelOpen ? '\u25B6' : '\u25C0'}
         </button>
+
+        {/* Spatial SQL (GA) overlay */}
+        <SpatialSQLPanel />
       </div>
 
       {/* --- Right Panel --- */}

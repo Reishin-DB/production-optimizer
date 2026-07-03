@@ -95,14 +95,22 @@ export default function AskGeniePage() {
             Natural-language access to the production-optimizer data plane — wells, decline curves, recommendations, field economics.
           </div>
         </div>
-        <span style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          background: "#0c2333", border: "1px solid #06b6d444", borderRadius: 12,
-          padding: "3px 9px", fontSize: 10, color: "#67e8f9", fontWeight: 600,
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: 3, background: "#22c55e" }}></span>
-          Genie · UC governed
-        </span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            background: "#0c2333", border: "1px solid #06b6d444", borderRadius: 12,
+            padding: "3px 9px", fontSize: 10, color: "#67e8f9", fontWeight: 600,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: 3, background: "#22c55e" }}></span>
+            Genie · UC governed
+          </span>
+          <a href="https://fevm-oil-pump-monitor.cloud.databricks.com/genie/rooms/01f1559bf0731e529a700d5509784968"
+             target="_blank" rel="noopener noreferrer" style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            background: "#06b6d418", border: "1px solid #06b6d455", borderRadius: 6,
+            padding: "3px 10px", fontSize: 10.5, color: "#67e8f9", fontWeight: 600, textDecoration: "none",
+          }}>Open Genie Space ↗</a>
+        </div>
       </div>
 
       {msgs.length === 0 && (

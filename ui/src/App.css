@@ -327,7 +327,10 @@ body,
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Scrollable so tall tabs (Supervisor, Data & AI Flow) can scroll.
+     The map tab uses .geo-layout { flex: 1 } and fills without scrolling. */
+  overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   /* 1.5x scale-up for all tabs by default; Digital Twin opts out below. */
   zoom: 1.5;

@@ -28,8 +28,25 @@ export default function SupervisorTab() {
   const [running, setRunning]   = useState(false);
   const [status, setStatus]     = useState<Record<string, Status>>({});
   const [results, setResults]   = useState<Record<string, SpecialistResult>>({});
-  const [rec, setRec]           = useState<{ text: string; total_ms: number; verdict?: string } | null>(null);
+  const [rec, setRec]           = useState<{ text: string; total_ms: number; verdict?: string; model?: string } | null>(null);
   const [err, setErr]           = useState<string | null>(null);
+  const [models, setModels]     = useState<{ id: string; label: string; note: string; family: string }[]>([]);
+  const [model, setModel]       = useState<string>("databricks-claude-sonnet-4-5");
+
+  useEffect(() => {
+    fetch("/api/model").then(r => r.json()).then(d => {
+      if (d.model) setModel(d.model);
+      if (Array.isArray(d.available)) setModels(d.available);
+    }).catch(() => {});
+  }, []);
+
+  function pickModel(m: string) {
+    const prev = model;
+    setModel(m);
+    fetch("/api/model", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: m }) })
+      .then(r => r.json()).then(d => { if (!d.ok) setModel(prev); })
+      .catch(() => setModel(prev));
+  }
   const abortRef                = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -93,7 +110,7 @@ export default function SupervisorTab() {
             setResults(prev => ({ ...prev, [data.id]: data }));
             setStatus(prev => ({ ...prev, [data.id]: data.error ? "error" : "done" }));
           } else if (ev === "recommendation") {
-            setRec({ text: data.text || "", total_ms: data.total_ms || 0, verdict: data.verdict });
+            setRec({ text: data.text || "", total_ms: data.total_ms || 0, verdict: data.verdict, model: data.model });
           }
         }
       }
@@ -145,6 +162,29 @@ export default function SupervisorTab() {
             }}>{v}</span>
           ))}
         </div>
+      </div>
+
+      {/* Control · Cost · Choice — live model picker (routes the Supervisor's FM calls) */}
+      <div style={{
+        background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 12,
+        padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+      }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.05em", color: "#4dabf7" }}>CHOICE · MODEL</span>
+        <span style={{ fontSize: 10.5, color: "#64748b" }}>pick a model — the Supervisor calls it, no code change (governed by AI Gateway):</span>
+        {(models.length ? models : [{ id: "databricks-claude-sonnet-4-5", label: "Claude Sonnet 4.5", note: "default", family: "Anthropic" }]).map(m => {
+          const active = m.id === model;
+          return (
+            <button key={m.id} onClick={() => pickModel(m.id)} title={m.id} style={{
+              display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
+              background: active ? "#4dabf722" : "#111827",
+              border: `1px solid ${active ? "#4dabf7" : "#1e293b"}`, borderRadius: 6, padding: "4px 9px",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: 3, background: active ? "#4dabf7" : "#475569" }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: active ? "#4dabf7" : "#cbd5e1" }}>{m.label}</span>
+              <span style={{ fontSize: 8.5, fontWeight: 700, color: m.family === "Open" ? "#22c55e" : "#a78bfa" }}>{m.family}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div style={{
@@ -203,9 +243,12 @@ export default function SupervisorTab() {
             <div style={{ fontSize: 14, fontWeight: 700, color: verdictColor(rec.verdict), letterSpacing: "0.02em" }}>
               VERDICT — {rec.verdict || "REVIEW"}
             </div>
-            <div style={{ fontSize: 10, color: "#64748b" }}>{rec.total_ms} ms total</div>
+            <div style={{ fontSize: 10, color: "#64748b", display: "flex", gap: 10, alignItems: "center" }}>
+              {rec.model && <span style={{ color: "#4dabf7", fontFamily: "monospace" }}>model: {rec.model}</span>}
+              <span>{rec.total_ms} ms total</span>
+            </div>
           </div>
-          <div style={{ fontSize: 13, color: "#e2e8f0", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{rec.text}</div>
+          <div style={{ fontSize: 13, color: "#e2e8f0", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{typeof rec.text === "string" ? rec.text : JSON.stringify(rec.text)}</div>
         </div>
       )}
 
@@ -224,14 +267,14 @@ export default function SupervisorTab() {
                 {r?.ms != null && <span style={{ fontSize: 10, color: "#64748b" }}>{r.ms} ms</span>}
               </div>
               <div style={{ fontSize: 10, color: "#64748b", marginBottom: 8 }}>
-                {s.feature}{s.endpoint ? ` · ${s.endpoint}` : ""}
+                {s.feature}{(r?.endpoint || s.endpoint) ? ` · ${r?.endpoint || s.endpoint}` : ""}
               </div>
               {st === "running" && <div style={{ fontSize: 11, color: "#eab308" }}>running…</div>}
               {st === "idle"    && <div style={{ fontSize: 11, color: "#475569" }}>{s.desc || "(waiting)"}</div>}
               {r?.error && <div style={{ fontSize: 11, color: "#fca5a5" }}>{r.error}</div>}
               {r?.result && (
                 <pre style={{ fontSize: 11, color: "#cbd5e1", whiteSpace: "pre-wrap",
-                              fontFamily: "inherit", margin: 0, lineHeight: 1.5 }}>{r.result}</pre>
+                              fontFamily: "inherit", margin: 0, lineHeight: 1.5 }}>{typeof r.result === "string" ? r.result : JSON.stringify(r.result)}</pre>
               )}
             </div>
           );

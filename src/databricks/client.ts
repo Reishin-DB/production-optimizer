@@ -38,8 +38,9 @@ export async function queryLakebase(config: DatabricksConfig, sql: string): Prom
     // Dynamic import — pg may not be installed in all environments
     const { Pool } = require('pg');
 
-    // Get OAuth token for password
-    const host = process.env.DATABRICKS_HOST || '';
+    // Get OAuth token for password. DATABRICKS_HOST in Apps has no scheme — prepend https://.
+    const rawHost = (process.env.DATABRICKS_HOST || '').replace(/\/$/, '');
+    const host = rawHost && !rawHost.startsWith('http') ? `https://${rawHost}` : rawHost;
     const tokenResp = await fetch(`${host}/oidc/v1/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

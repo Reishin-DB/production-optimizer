@@ -15,6 +15,8 @@ const shift_1 = __importDefault(require("./routes/shift"));
 const production_1 = __importDefault(require("./routes/production"));
 const genie_1 = __importDefault(require("./routes/genie"));
 const supervisor_1 = __importDefault(require("./routes/supervisor"));
+const geospatial_1 = __importDefault(require("./routes/geospatial"));
+const model_1 = __importDefault(require("./routes/model"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
 app.use((0, cors_1.default)({
@@ -36,6 +38,8 @@ app.use('/api/shift', shift_1.default);
 app.use('/api/production', production_1.default);
 app.use('/api/genie', genie_1.default);
 app.use('/api/supervisor', supervisor_1.default);
+app.use('/api/map', geospatial_1.default);
+app.use('/api/model', model_1.default);
 // Serve UI in production
 const uiDist = path_1.default.join(__dirname, '..', 'ui', 'dist');
 app.use(express_1.default.static(uiDist));

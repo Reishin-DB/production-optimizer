@@ -131,7 +131,7 @@ function StreamChart({ data, streams, yLabel, height = 160 }: StreamChartProps) 
 
   let maxVal = 0;
   for (const d of data) for (const s of streams) maxVal = Math.max(maxVal, d[s.key] || 0);
-  maxVal *= 1.1 || 1;
+  maxVal = maxVal * 1.1 || 1;
 
   const x = (i: number) => pad.left + (i / (data.length - 1)) * cw;
   const y = (v: number) => pad.top + ch - (v / maxVal) * ch;

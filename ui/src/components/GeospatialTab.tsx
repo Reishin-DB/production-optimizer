@@ -49,7 +49,10 @@ const LAYERS: LayerDef[] = [
   { key: 'flares', label: 'Flares', color: '#f97316' },
   { key: 'h3', label: 'H3 density', color: '#22d3ee' },
   { key: 'plume', label: 'CO₂ plume', color: '#f97316' },
+  { key: 'patterns', label: 'Flood patterns', color: '#a855f7' },
+  { key: 'spacing', label: 'Well spacing', color: '#e46b8b' },
 ];
+const PATTERN_COLORS = ['#a855f7', '#22d3ee', '#f59e0b', '#22c55e', '#e46b8b'];
 
 /* ------------------------------------------------------------------ */
 /*  Map math helpers                                                   */
@@ -194,6 +197,50 @@ function drawMap(
       ctx.stroke();
       ctx.setLineDash([]);
     }
+  }
+
+  // --- Flood-pattern footprints (ST_ConvexHull + ST_Buffer per pattern) ---
+  const patfc = (assets as any).__patterns as { features: any[] } | undefined;
+  if (visibility.patterns && patfc?.features?.length) {
+    patfc.features.forEach((f, idx) => {
+      const ring = f.ring as number[][];
+      if (!ring || ring.length < 3) return;
+      const col = PATTERN_COLORS[idx % PATTERN_COLORS.length];
+      const m = col.match(/#(..)(..)(..)/);
+      const rgb = m ? `${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)}` : '168,85,247';
+      ctx.beginPath();
+      const [sx, sy] = toXY(ring[0][0], ring[0][1]);
+      ctx.moveTo(sx, sy);
+      for (let i = 1; i < ring.length; i++) { const [x, y] = toXY(ring[i][0], ring[i][1]); ctx.lineTo(x, y); }
+      ctx.closePath();
+      ctx.fillStyle = `rgba(${rgb},0.12)`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(${rgb},0.85)`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      if (f.centroid) {
+        const [cx, cy] = toXY(f.centroid[0], f.centroid[1]);
+        ctx.font = 'bold 10px monospace';
+        ctx.fillStyle = col;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${f.pattern} · ${f.km2} km²`, cx, cy);
+        ctx.textAlign = 'start';
+      }
+    });
+  }
+
+  // --- Well spacing — nearest-offset producer lines (ST_Distance) ---
+  const spc = (assets as any).__spacing as { pairs: any[] } | undefined;
+  if (visibility.spacing && spc?.pairs?.length) {
+    ctx.strokeStyle = 'rgba(228, 107, 139, 0.8)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    for (const p of spc.pairs) {
+      const [x0, y0] = toXY(p.from[0], p.from[1]);
+      const [x1, y1] = toXY(p.to[0], p.to[1]);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.setLineDash([]);
   }
 
   // --- Pipelines ---
@@ -580,7 +627,7 @@ export default function GeospatialTab() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [layerPanelOpen, setLayerPanelOpen] = useState(true);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(LAYERS.map((l) => [l.key, l.key !== 'h3' && l.key !== 'plume']))
+    Object.fromEntries(LAYERS.map((l) => [l.key, !['h3', 'plume', 'patterns', 'spacing'].includes(l.key)]))
   );
   const layerVisRef = useRef(layerVisibility);
   const [layerCounts, setLayerCounts] = useState<Record<string, number>>({});
@@ -641,12 +688,16 @@ export default function GeospatialTab() {
 
         // Real Databricks spatial layers (H3 + ST_ from the SQL warehouse)
         try {
-          const [h3r, plr] = await Promise.all([
+          const [h3r, plr, patr, spr] = await Promise.all([
             fetch('/api/map/geospatial/h3-hexes').then((r) => (r.ok ? r.json() : null)),
             fetch('/api/map/geospatial/plumes').then((r) => (r.ok ? r.json() : null)),
+            fetch('/api/map/geospatial/patterns').then((r) => (r.ok ? r.json() : null)),
+            fetch('/api/map/geospatial/spacing').then((r) => (r.ok ? r.json() : null)),
           ]);
           if (h3r?.features) { (assetsRef.current as any).__h3 = h3r; counts['h3'] = h3r.features.length; }
           if (plr?.features) { (assetsRef.current as any).__plumes = plr; counts['plume'] = plr.features.length; }
+          if (patr?.features) { (assetsRef.current as any).__patterns = patr; counts['patterns'] = patr.features.length; }
+          if (spr?.pairs) { (assetsRef.current as any).__spacing = spr; counts['spacing'] = spr.pairs.length; }
         } catch { /* spatial layers optional */ }
 
         setLayerCounts(counts);

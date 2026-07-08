@@ -17,7 +17,17 @@ import { executeQuery } from '../databricks/sql';
 const router = Router();
 const provider = new InMemoryTwinDataProvider();
 
-const SCHEMA = process.env.DEMO_SCHEMA || 'oil_pump_monitor_catalog.production_optimizer';
+// DEMO_SCHEMA may be a bare schema ("production_optimizer") or a full "catalog.schema".
+// UC_SCHEMA (if present) is the full path; otherwise join DEMO_CATALOG + DEMO_SCHEMA.
+function resolveSchema(): string {
+  const uc = process.env.UC_SCHEMA;
+  if (uc && uc.includes('.')) return uc;
+  const s = process.env.DEMO_SCHEMA || 'production_optimizer';
+  if (s.includes('.')) return s;
+  const cat = process.env.DEMO_CATALOG || 'oil_pump_monitor_catalog';
+  return `${cat}.${s}`;
+}
+const SCHEMA = resolveSchema();
 const TABLE = `${SCHEMA}.well_locations`;
 
 // Central processing facility coordinate (BASE_LON + ~0.5, BASE_LAT) from the field layout.
@@ -159,6 +169,51 @@ router.get('/geospatial/plumes', async (_req, res) => {
       })
     }
     res.json({ type: 'FeatureCollection', features, method: "ST_Contains(ST_GeomFromText(plume), ST_Point(well))" })
+  } catch (e: any) {
+    res.status(500).json({ error: String(e?.message || e) })
+  }
+})
+
+// ── Flood-pattern footprints (ST_ConvexHull + ST_Buffer per pattern) + acreage ──
+router.get('/geospatial/patterns', async (_req, res) => {
+  try {
+    await ensureSeeded()
+    const rows = await executeQuery(
+      `SELECT pattern_id, count(*) AS wells,\n` +
+      `  round(ST_Area(ST_Buffer(ST_ConvexHull(ST_Union_Agg(ST_Point(lon,lat))),0.015))*111.0*111.0) AS km2,\n` +
+      `  ST_AsGeoJSON(ST_Buffer(ST_ConvexHull(ST_Union_Agg(ST_Point(lon,lat))),0.015)) AS gj,\n` +
+      `  ST_AsGeoJSON(ST_Centroid(ST_Union_Agg(ST_Point(lon,lat)))) AS ctr\n` +
+      `FROM ${TABLE} WHERE pattern_id IS NOT NULL AND pattern_id <> '' GROUP BY pattern_id ORDER BY pattern_id`,
+    )
+    const features = rows.map((r: any) => {
+      try {
+        const ring = JSON.parse(r.gj).coordinates[0]
+        const ctr = JSON.parse(r.ctr).coordinates
+        return { pattern: r.pattern_id, wells: Number(r.wells), km2: Number(r.km2), ring, centroid: ctr }
+      } catch { return null }
+    }).filter(Boolean)
+    res.json({ features, method: 'ST_ConvexHull + ST_Buffer + ST_Area per flood pattern' })
+  } catch (e: any) {
+    res.status(500).json({ error: String(e?.message || e) })
+  }
+})
+
+// ── Well spacing — nearest offset producer via ST_Distance ──────────────────
+router.get('/geospatial/spacing', async (_req, res) => {
+  try {
+    await ensureSeeded()
+    const rows = await executeQuery(
+      `SELECT a.well_id, a.lon AS flon, a.lat AS flat, b.well_id AS nn, b.lon AS tlon, b.lat AS tlat,\n` +
+      `  round(ST_Distance(ST_Point(a.lon,a.lat),ST_Point(b.lon,b.lat))*111.0,2) AS km\n` +
+      `FROM ${TABLE} a JOIN ${TABLE} b ON a.well_id <> b.well_id\n` +
+      `WHERE a.well_type = 'producer' AND b.well_type = 'producer'\n` +
+      `QUALIFY row_number() OVER (PARTITION BY a.well_id ORDER BY ST_Distance(ST_Point(a.lon,a.lat),ST_Point(b.lon,b.lat)))=1`,
+    )
+    const pairs = rows.map((r: any) => ({
+      well_id: r.well_id, nn: r.nn, km: Number(r.km),
+      from: [Number(r.flon), Number(r.flat)], to: [Number(r.tlon), Number(r.tlat)],
+    }))
+    res.json({ pairs, method: 'ST_Distance nearest-neighbor (producers)' })
   } catch (e: any) {
     res.status(500).json({ error: String(e?.message || e) })
   }

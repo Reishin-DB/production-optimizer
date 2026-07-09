@@ -20,15 +20,28 @@ export interface Proposal {
   status: 'pending' | 'approved' | 'rejected';
 }
 
-interface AgentResponse {
-  summary: string;
-  contextCounts?: Record<string, number>;
-  agentRole?: string;
+interface GenieResponse {
+  text?: string;
+  rows?: unknown[][];
+  columns?: string[];
+  error?: string;
 }
 
 interface FeatureProperties {
   [key: string]: unknown;
 }
+
+/* Prepared questions for the Field Overview Genie sidebar.
+   Includes geospatial / Spatial SQL questions (H3 cells, ST_Distance proximity)
+   that Genie answers against well_locations + well_h3_density in Unity Catalog. */
+const FIELD_QUESTIONS = [
+  'How many wells are in each H3 cell?',
+  'Which wells are within 2 km of W-A01?',
+  'Top 5 wells by oil rate',
+  'Which wells have the highest water cut?',
+  'CO₂ injection vs recycle by pattern',
+  'Field netback and breakeven',
+];
 
 interface Props {
   selectedFeature: FeatureProperties | null;
@@ -77,7 +90,8 @@ export default function AgentPanel({ selectedFeature, featureType }: Props) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [query, setQuery] = useState('');
   const [sending, setSending] = useState(false);
-  const [response, setResponse] = useState<AgentResponse | null>(null);
+  const [response, setResponse] = useState<GenieResponse | null>(null);
+  const [conv, setConv] = useState<string | null>(null);
 
   /* Fetch agents & proposals */
   const fetchAgents = useCallback(async () => {
@@ -113,28 +127,33 @@ export default function AgentPanel({ selectedFeature, featureType }: Props) {
     return () => clearInterval(iv);
   }, [fetchAgents, fetchProposals]);
 
-  /* Submit agent query */
-  async function handleSend() {
-    if (!query.trim() || sending) return;
+  /* Submit question to Genie (NL → governed SQL over the UC gold tables). */
+  async function ask(text: string) {
+    const q = text.trim();
+    if (!q || sending) return;
+    setQuery(q);
     setSending(true);
     setResponse(null);
+    // If a map feature is selected, scope the question to it.
+    let question = q;
+    if (selectedFeature && (selectedFeature.id || selectedFeature.name)) {
+      question = `For ${selectedFeature.id || selectedFeature.name}: ${q}`;
+    }
     try {
-      const body: Record<string, unknown> = { prompt: query.trim() };
-      if (selectedFeature) {
-        body.selectedEntities = [selectedFeature];
-      }
-      const res = await fetch('/api/agent/query', {
+      const res = await fetch('/api/genie/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ question, conversation_id: conv }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: AgentResponse = await res.json();
-      setResponse(data);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setResponse({ error: data.error || `HTTP ${res.status}` });
+      } else {
+        setConv(data.conversation_id || conv);
+        setResponse({ text: data.text, rows: data.rows, columns: data.columns });
+      }
     } catch (err) {
-      setResponse({
-        summary: `Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      });
+      setResponse({ error: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setSending(false);
     }
@@ -205,42 +224,96 @@ export default function AgentPanel({ selectedFeature, featureType }: Props) {
         </div>
       </div>
 
-      {/* --- Agent Query --- */}
+      {/* --- Ask Genie --- */}
       <div className="panel-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div className="panel-section-header">Query Agent</div>
+        <div className="panel-section-header">
+          <span>✨ Ask Genie</span>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9,
+            color: '#67e8f9', border: '1px solid #06b6d444', borderRadius: 8, padding: '1px 6px',
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: 3, background: '#22c55e' }} />
+            UC governed
+          </span>
+        </div>
         <div className="panel-section-body" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {/* Prepared questions */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+            {FIELD_QUESTIONS.map((q) => (
+              <button
+                key={q}
+                onClick={() => ask(q)}
+                disabled={sending}
+                style={{
+                  fontSize: 10.5, padding: '4px 8px', borderRadius: 12,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)', cursor: sending ? 'not-allowed' : 'pointer',
+                  textAlign: 'left',
+                }}
+              >{q}</button>
+            ))}
+          </div>
+
           <div className="agent-query-area" style={{ flex: 1 }}>
             <textarea
               className="agent-textarea"
-              placeholder="Ask about well performance, injection strategy, CO&#x2082; balance..."
+              placeholder="Ask Genie about wells, decline curves, CO&#x2082; balance, economics, or well spacing &amp; H3 density (Spatial SQL)..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend();
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(query);
               }}
             />
             <button
               className="agent-send-btn"
               disabled={!query.trim() || sending}
-              onClick={handleSend}
+              onClick={() => ask(query)}
             >
-              {sending ? 'Thinking...' : 'Ask Agent'}
+              {sending ? 'Genie is reasoning…' : 'Ask Genie'}
             </button>
 
             {response && (
               <div className="agent-response">
-                {response.agentRole && (
-                  <div className="agent-response-role">{response.agentRole}</div>
-                )}
-                <div className="agent-response-text">{response.summary}</div>
-                {response.contextCounts && Object.keys(response.contextCounts).length > 0 && (
-                  <div className="agent-context-counts">
-                    {Object.entries(response.contextCounts).map(([key, count]) => (
-                      <span key={key} className="context-count-badge">
-                        {key}: {count}
-                      </span>
-                    ))}
-                  </div>
+                {response.error ? (
+                  <div className="agent-response-text" style={{ color: '#fca5a5' }}>⚠️ {response.error}</div>
+                ) : (
+                  <>
+                    {response.text && (
+                      <div className="agent-response-text" style={{ whiteSpace: 'pre-wrap' }}>{response.text}</div>
+                    )}
+                    {response.columns && response.columns.length > 0 && response.rows && response.rows.length > 0 && (
+                      <div style={{ overflowX: 'auto', marginTop: 8 }}>
+                        <table style={{ borderCollapse: 'collapse', fontSize: 10.5, width: '100%' }}>
+                          <thead>
+                            <tr>
+                              {response.columns.map((c, i) => (
+                                <th key={i} style={{
+                                  background: 'var(--bg-card)', color: 'var(--text-muted)',
+                                  padding: '4px 7px', border: '1px solid var(--border)', textAlign: 'left',
+                                }}>{c}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {response.rows.slice(0, 12).map((r, i) => (
+                              <tr key={i}>
+                                {r.map((v, j) => (
+                                  <td key={j} style={{ padding: '3px 7px', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                                    {v == null ? '' : String(v).slice(0, 40)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {response.rows.length > 12 && (
+                          <div style={{ fontSize: 9.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                            … {response.rows.length - 12} more rows
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

@@ -450,7 +450,8 @@ body,
   flex-direction: column;
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   transition: width 0.2s ease, opacity 0.2s ease;
 }
 

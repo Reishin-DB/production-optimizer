@@ -104,12 +104,12 @@ export default function AskGeniePage() {
             <span style={{ width: 6, height: 6, borderRadius: 3, background: "#22c55e" }}></span>
             Genie · UC governed
           </span>
-          <a href="https://fevm-oil-pump-monitor.cloud.databricks.com/genie/rooms/01f1559bf0731e529a700d5509784968"
+          <a href="https://fevm-oil-pump-monitor.cloud.databricks.com/genie/rooms/01f17afe5588147dbb46b8d9ecf501cd?o=7474647106303257"
              target="_blank" rel="noopener noreferrer" style={{
             display: "inline-flex", alignItems: "center", gap: 5,
             background: "#06b6d418", border: "1px solid #06b6d455", borderRadius: 6,
             padding: "3px 10px", fontSize: 10.5, color: "#67e8f9", fontWeight: 600, textDecoration: "none",
-          }}>Open Genie Space ↗</a>
+          }}>Open Genie ↗</a>
         </div>
       </div>
 

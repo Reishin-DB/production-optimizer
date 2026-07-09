@@ -627,7 +627,9 @@ export default function GeospatialTab() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [layerPanelOpen, setLayerPanelOpen] = useState(true);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(LAYERS.map((l) => [l.key, !['h3', 'plume', 'patterns', 'spacing'].includes(l.key)]))
+    // Everything on by default except Well spacing (dense line overlay — opt-in).
+    // H3 density, CO₂ plume and Flood patterns render on load so the spatial SQL is visible.
+    Object.fromEntries(LAYERS.map((l) => [l.key, !['spacing'].includes(l.key)]))
   );
   const layerVisRef = useRef(layerVisibility);
   const [layerCounts, setLayerCounts] = useState<Record<string, number>>({});

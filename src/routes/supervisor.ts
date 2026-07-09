@@ -80,7 +80,12 @@ async function dbxApi(path: string, opts: { method?: string; body?: string } = {
   });
 }
 
-// ── Claude (Foundation Model API) ────────────────────────────
+// ── Foundation Model API + per-run token accounting (Cost pillar) ─────
+// Accumulates real token usage across every FM call in one /decide run so the UI
+// can show an actual (not guessed) cost for the selected model.
+let _usage = { prompt: 0, completion: 0, calls: 0 };
+function resetUsage() { _usage = { prompt: 0, completion: 0, calls: 0 }; }
+
 async function claudeCall(system: string, user: string, maxTokens = 600): Promise<string> {
   try {
     const r = await dbxApi(`/serving-endpoints/${currentModel()}/invocations`, {
@@ -94,6 +99,10 @@ async function claudeCall(system: string, user: string, maxTokens = 600): Promis
         temperature: 0.2,
       }),
     });
+    const u = r?.usage || {};
+    _usage.prompt += Number(u.prompt_tokens || 0);
+    _usage.completion += Number(u.completion_tokens || 0);
+    _usage.calls += 1;
     // Coerce content to a string. Open models (GPT-OSS, etc.) can return content as
     // an array of parts or an object; returning that non-string crashes the React UI.
     const c = r?.choices?.[0]?.message?.content;
@@ -103,6 +112,27 @@ async function claudeCall(system: string, user: string, maxTokens = 600): Promis
   } catch (e: any) {
     return `(Claude unavailable: ${e?.message || e})`;
   }
+}
+
+// USD per 1M tokens per model, mirrors AVAILABLE_MODELS in model.ts (Cost pillar).
+const MODEL_RATES: Record<string, { inPerM: number; outPerM: number }> = {
+  'databricks-claude-sonnet-4-5': { inPerM: 3.00,  outPerM: 15.00 },
+  'databricks-claude-opus-4-8':   { inPerM: 15.00, outPerM: 75.00 },
+  'databricks-claude-haiku-4-5':  { inPerM: 0.80,  outPerM: 4.00 },
+  'databricks-gpt-oss-120b':      { inPerM: 0.50,  outPerM: 1.50 },
+  'databricks-llama-4-maverick':  { inPerM: 0.60,  outPerM: 1.80 },
+  'databricks-qwen35-122b-a10b':  { inPerM: 0.70,  outPerM: 2.00 },
+};
+
+function costForRun(model: string) {
+  const rate = MODEL_RATES[model] || MODEL_RATES['databricks-claude-sonnet-4-5'];
+  const usd = (_usage.prompt / 1e6) * rate.inPerM + (_usage.completion / 1e6) * rate.outPerM;
+  return {
+    model, calls: _usage.calls,
+    prompt_tokens: _usage.prompt, completion_tokens: _usage.completion,
+    in_per_m: rate.inPerM, out_per_m: rate.outPerM,
+    usd: Number(usd.toFixed(5)),
+  };
 }
 
 // ── SQL via Statement Execution ──────────────────────────────
@@ -288,6 +318,73 @@ async function specialistOps(req: DecideReq, ctx: any) {
            endpoint: `${CATALOG}.${SCHEMA}.bronze_wells`, ms: Date.now() - t0, result: lines.join('\n') };
 }
 
+// ── Planner / router — the "omnigent" orchestration step ────
+// The supervisor reasons about the question + available context and decides which
+// specialists to engage (decomposition + routing), rather than blindly firing all 5.
+interface RouteDecision { id: string; name: string; engage: boolean; reason: string }
+
+const SPECIALIST_CATALOG = [
+  { id: 'decline',     name: 'Decline Curve Analyst',     needsWell: true,  when: 'production decline, EUR, reserves, forecast, or per-well performance' },
+  { id: 'economics',   name: 'Economic Impact Evaluator', needsWell: false, when: 'NPV, revenue, cost, netback, breakeven, or the value of approving' },
+  { id: 'rec_history', name: 'Recommendation History',    needsWell: false, when: 'prior recommendations, track record, or what was tried before' },
+  { id: 'analog',      name: 'Analog Field Reference',    needsWell: false, when: 'external SPE / analog-field precedent or literature support' },
+  { id: 'ops',         name: 'Operations Feasibility',    needsWell: true,  when: 'operational feasibility, well status, pattern neighbors, execution risk' },
+];
+const NAME_BY_ID: Record<string, string> = Object.fromEntries(SPECIALIST_CATALOG.map(s => [s.id, s.name]));
+
+function fallbackRoute(hasWell: boolean, hasRec: boolean): RouteDecision[] {
+  return SPECIALIST_CATALOG.map(s => {
+    let engage = true, reason = 'default engage';
+    if (!hasWell && s.needsWell) { engage = false; reason = 'no well selected'; }
+    if (s.id === 'rec_history' && !hasWell && !hasRec) { engage = false; reason = 'no well or rec context'; }
+    return { id: s.id, name: s.name, engage, reason };
+  });
+}
+
+const PLAN_SYSTEM =
+  "You are a multi-agent orchestrator for a CO2-EOR production optimizer. Given a user question and the " +
+  "available specialist agents, decide which agents to engage to answer it well. Engage ONLY the relevant " +
+  "ones (usually 2-4, rarely all 5). Reply with STRICT JSON only, no prose:\n" +
+  '{"strategy":"<one-sentence plan>","route":[{"id":"<agent id>","engage":true,"reason":"<max 8 words>"}]}\n' +
+  "Include EVERY agent id in route with engage true or false.";
+
+async function planRoute(req: DecideReq, ctx: any): Promise<{ strategy: string; route: RouteDecision[] }> {
+  const hasWell = !!(req.well_id || ctx.well);
+  const hasRec = !!(ctx.rec?.rec_id);
+  const agentLines = SPECIALIST_CATALOG.map(s => `- ${s.id} (${s.name}): engage when ${s.when}.`).join('\n');
+  const user =
+    `QUESTION: ${req.question}\n` +
+    `Context available: well=${req.well_id || 'none'} · recommendation=${ctx.rec?.rec_id || 'none'} · oil=$${(req.oil_price || 75).toFixed(0)}/bbl\n\n` +
+    `AGENTS:\n${agentLines}`;
+  try {
+    const raw = await claudeCall(PLAN_SYSTEM, user, 300);
+    const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    let route: RouteDecision[] = SPECIALIST_CATALOG.map(s => {
+      const found = (json.route || []).find((r: any) => r.id === s.id);
+      return {
+        id: s.id, name: s.name,
+        engage: found ? !!found.engage : true,
+        reason: String(found?.reason || '').slice(0, 60) || 'relevant to question',
+      };
+    });
+    // Guardrail: well-dependent agents can't run without a well, whatever the planner said.
+    route = route.map(r => {
+      const spec = SPECIALIST_CATALOG.find(s => s.id === r.id)!;
+      if (!hasWell && spec.needsWell) return { ...r, engage: false, reason: 'no well selected' };
+      return r;
+    });
+    // Never end up with fewer than 2 engaged — fall back if the planner over-pruned.
+    if (route.filter(r => r.engage).length < 2) route = fallbackRoute(hasWell, hasRec);
+    const strategy = String(json.strategy || '').slice(0, 200) || 'Engaging the specialists relevant to this question.';
+    return { strategy, route };
+  } catch {
+    return {
+      strategy: 'Planner model unavailable — engaging all applicable specialists.',
+      route: fallbackRoute(hasWell, hasRec),
+    };
+  }
+}
+
 // ── Synthesis ───────────────────────────────────────────────
 const SYNTH_SYSTEM =
   "You are the Production Optimizer Approval Supervisor. Five specialists returned findings about a proposed " +
@@ -330,6 +427,7 @@ router.post('/decide', async (req: Request, res: Response) => {
 
   const t0 = Date.now();
   const body = (req.body || {}) as DecideReq;
+  resetUsage();
 
   try {
     const ctx = await loadContext(body);
@@ -349,11 +447,26 @@ router.post('/decide', async (req: Request, res: Response) => {
       ],
     }));
 
-    const specialistFns = [
-      specialistDecline, specialistEconomics, specialistRecHistory, specialistAnalog, specialistOps,
-    ];
-    const promises = specialistFns.map(fn => fn(body, ctx).catch(e => ({
-      id: 'unknown', name: 'specialist', error: String(e?.message || e),
+    // 1) Plan — the supervisor decides which specialists this question actually needs.
+    const { strategy, route } = await planRoute(body, ctx);
+    res.write(sseEvent('plan', { strategy, route, model: currentModel(), plan_ms: Date.now() - t0 }));
+
+    // 2) Emit skipped cards immediately so the UI can dim them.
+    for (const r of route.filter(r => !r.engage)) {
+      res.write(sseEvent('specialist', {
+        id: r.id, name: NAME_BY_ID[r.id] || r.id, skipped: true,
+        reason: r.reason, result: `(not engaged — ${r.reason})`,
+      }));
+    }
+
+    // 3) Run only the engaged specialists, in parallel.
+    const FN_BY_ID: Record<string, (r: DecideReq, c: any) => Promise<any>> = {
+      decline: specialistDecline, economics: specialistEconomics, rec_history: specialistRecHistory,
+      analog: specialistAnalog, ops: specialistOps,
+    };
+    const engagedIds = route.filter(r => r.engage).map(r => r.id);
+    const promises = engagedIds.map(id => FN_BY_ID[id](body, ctx).catch(e => ({
+      id, name: NAME_BY_ID[id] || id, error: String(e?.message || e),
     })));
     const collected: any[] = [];
     for (const p of promises) {
@@ -364,9 +477,22 @@ router.post('/decide', async (req: Request, res: Response) => {
 
     const recText = await synthesize(body, ctx, collected);
     const verdict = extractVerdict(recText);
+
+    // Cost pillar — actual token usage × the selected model's rate.
+    const cost = costForRun(currentModel());
+    // Governance pillar — everything this run was governed by.
+    const governance = {
+      gateway: 'Mosaic AI Gateway',
+      guardrails: ['PII / safety filters', 'Payload logging', 'Rate limiting'],
+      audit: `Agent run logged · ${cost.calls} model call(s) · verdict ${verdict}`,
+      data: `Governed UC tables under ${CATALOG}.${SCHEMA} (Unity Catalog ACLs)`,
+      model_governed: currentModel(),
+    };
+
     res.write(sseEvent('recommendation', {
       text: recText, verdict, total_ms: Date.now() - t0,
       rec_id: body.rec_id, well_id: body.well_id, model: currentModel(),
+      cost, governance,
     }));
     res.write(sseEvent('done', { total_ms: Date.now() - t0 }));
   } catch (e: any) {

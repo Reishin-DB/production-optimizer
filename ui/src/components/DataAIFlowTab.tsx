@@ -51,8 +51,8 @@ const SERVING: NodeDef[] = [
     detail: ['Serverless · id 87e069097741b56c', '/api/2.0/sql/statements', 'App SP OAuth token', 'All UC reads + writes'] },
   { id: 'genie', label: 'Genie Space', sub: 'Production Optimizer', x: 440, y: 320, w: 160, h: 54, color: '#00E5FF', badge: 'GENIE',
     detail: ['space 01f1559bf073… · NL → SQL', 'Scoped to gold_* + metric views', 'mv_production · mv_economics (ontology)', 'Powers Ask Genie + Field Overview agent'] },
-  { id: 'fmapi', label: 'Claude Sonnet 4.5', sub: 'Foundation Model API', x: 640, y: 320, w: 170, h: 54, color: '#9254de', badge: 'LLM',
-    detail: ['databricks-claude-sonnet-4-5', '/serving-endpoints/{name}/invocations', 'Powers the Approval Supervisor', 'Fronted by Mosaic AI Gateway'] },
+  { id: 'fmapi', label: 'Model · AI Gateway', sub: 'FM API · governed', x: 640, y: 320, w: 170, h: 54, color: '#9254de', badge: 'LLM',
+    detail: ['Any of 6 endpoints — Claude Sonnet/Opus/Haiku + GPT-OSS/Llama/Qwen', '/serving-endpoints/{name}/invocations', 'CHOICE: picked in the Supervisor at runtime, no redeploy', 'COST: $/1M-token rate per model · actual usage metered per run', 'GOVERNANCE: Mosaic AI Gateway — PII/safety guardrails, payload logging, rate limits'] },
 ]
 
 // ─── Row 4: Agents + Application ────────────────────────────────────────────
@@ -61,8 +61,8 @@ const APPL: NodeDef[] = [
     detail: ['Routes: production · commercial · twin', 'agent · genie · supervisor · map · shift', 'Node-native Genie + Supervisor (no sidecar)', 'Deployed as a Databricks App'] },
   { id: 'field-agent', label: 'Field Overview', sub: 'Genie family', x: 250, y: 540, w: 150, h: 54, color: '#6366f1', badge: 'AGENT',
     detail: ['/api/agent/query → Genie', 'Selected-asset props prepended', 'Map click drives context', 'Returns NL answer + SQL + rows'] },
-  { id: 'supervisor', label: 'Approval Supervisor', sub: 'multi-agent · 5 specialists', x: 420, y: 540, w: 180, h: 54, color: '#00E5FF', badge: 'MAS',
-    detail: ['5 specialists run in parallel (SSE)', 'Decline · Economics · Rec History', 'Analog · Operations', 'Claude 4.5 synthesis verdict'] },
+  { id: 'supervisor', label: 'Approval Supervisor', sub: 'orchestrator · plans + routes', x: 420, y: 540, w: 180, h: 54, color: '#00E5FF', badge: 'MAS',
+    detail: ['1) Planner reasons which specialists the question needs (SSE plan event)', 'Routes to a subset of 5 — Decline · Economics · Rec History · Analog · Ops', 'Engaged specialists run in parallel; skipped ones shown + dimmed', 'Synthesises a verdict from only the engaged findings', 'Choice: model swappable at runtime · Cost: token spend metered per run', 'Governance: AI Gateway guardrails + audit log on every call'] },
   { id: 'ask-genie', label: 'Ask Genie', sub: 'Genie family', x: 620, y: 540, w: 140, h: 54, color: '#6366f1', badge: 'AGENT',
     detail: ['/api/genie/ask · free-form NL → SQL', 'Returns text + SQL + result rows', 'Conversation persistence', 'Direct Genie Space access'] },
   { id: 'scenario', label: 'Scenario Engine', sub: 'Genie family', x: 780, y: 540, w: 150, h: 54, color: '#6366f1', badge: 'AGENT',
@@ -202,7 +202,7 @@ export default function DataAIFlowTab() {
                 { h: '1 · Ingest',      c: 'SCADA, IoT, CO₂ meters, market feeds, lab/PVT, and field history land in Bronze Delta via Auto Loader and load_data.py.', col: '#3b82f6' },
                 { h: '2 · Transform',   c: 'Bronze → Silver (GOR, water cut, CO₂%) → Gold. Arps decline physics writes gold_decline_curves; economics rolls up per well and field.', col: '#cd7f32' },
                 { h: '3 · Serve',       c: 'Genie owns NL→SQL over the gold tables + metric views (mv_production, mv_economics). The SQL warehouse serves every read.', col: '#00E5FF' },
-                { h: '4 · Genie family', c: 'Four agents share the Genie + FM API layer: Field Overview, Ask Genie, Scenario Engine, and the Approval Supervisor (5 specialists, SSE).', col: '#6366f1' },
+                { h: '4 · Genie family', c: 'Four agents share the Genie + FM API layer: Field Overview, Ask Genie, Scenario Engine, and the Approval Supervisor — which plans the task, routes to the relevant specialists (of 5), and synthesises a verdict over SSE.', col: '#6366f1' },
                 { h: 'Geospatial',      c: 'MapLibre GL field map backed by real spatial SQL — H3 hex density, ST_Contains lease joins, ST_Distance proximity.', col: '#73d13d' },
                 { h: 'Governance',      c: 'Unity Catalog grants + metric views govern data and AI alike. Genie runs as the user, so masks apply to AI answers too.', col: '#F39C12' },
                 { h: 'AI Gateway',      c: 'Mosaic AI Gateway fronts the FM endpoint: safety + PII guardrails, rate limits, model choice, and usage tracking.', col: '#9254de' },

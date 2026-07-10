@@ -95,14 +95,43 @@ export interface CO2Source {
     purity: number;
     cost: number;
 }
-export interface MonitoringPoint extends GeoPoint {
+/** Optional surface-context attributes carried by surface points. */
+export interface SurfaceData {
+    elevationFt?: number;
+    surfaceTempF?: number;
+    soilType?: string;
+    landUse?: string;
+}
+export interface MonitoringPoint extends GeoPoint, SurfaceData {
     id: string;
     name: string;
-    type: 'seismic' | 'pressure' | 'soil_gas' | 'groundwater' | 'tiltmeter';
+    type: 'seismic' | 'pressure' | 'soil_gas' | 'groundwater' | 'tiltmeter' | 'methane' | 'air_quality';
     value: number;
     unit: string;
     threshold: number;
     status: 'normal' | 'warning' | 'alarm';
+    patternId?: string;
+}
+/** Surface infrastructure — tank batteries, compressors, metering skids, LACT. */
+export interface SurfaceStructure extends GeoPoint, SurfaceData {
+    id: string;
+    name: string;
+    type: 'tank_battery' | 'compressor' | 'metering_skid' | 'lact_unit' | 'separator';
+    status: 'online' | 'standby' | 'maintenance';
+    throughput: number;
+    unit: string;
+    padId?: string;
+}
+/** Surface gathering flowline between a well/pad and a facility. */
+export interface GatheringLine {
+    id: string;
+    name: string;
+    product: PipelineProduct;
+    fromId: string;
+    toId: string;
+    from: [number, number];
+    to: [number, number];
+    diameterIn: number;
 }
 export interface FlarePoint extends GeoPoint {
     id: string;
@@ -210,6 +239,9 @@ export interface TwinState {
     pipelines: Pipeline[];
     co2Sources: CO2Source[];
     monitoringPoints: MonitoringPoint[];
+    surfaceStructures: SurfaceStructure[];
+    gatheringLines: GatheringLine[];
+    leaseBoundary: [number, number][];
     flares: FlarePoint[];
     fleet: FleetAsset[];
     alerts: Alert[];

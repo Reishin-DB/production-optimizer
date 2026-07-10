@@ -163,13 +163,60 @@ router.get('/geospatial/assets', async (_req, res) => {
         name: m.name,
         entityType: 'monitoringPoint',
         monitorType: m.type,
+        patternId: m.patternId,
         value: m.value,
         unit: m.unit,
         threshold: m.threshold,
         status: m.status,
+        elevationFt: m.elevationFt,
+        surfaceTempF: m.surfaceTempF,
+        soilType: m.soilType,
+        landUse: m.landUse,
         color: m.status === 'alarm' ? '#ef4444' : m.status === 'warning' ? '#eab308' : '#22c55e',
       },
     })),
+  };
+
+  // Surface infrastructure — tank batteries, compressors, metering, LACT, separators
+  const surfStructColor: Record<string, string> = {
+    tank_battery: '#38bdf8', compressor: '#f59e0b', metering_skid: '#a78bfa',
+    lact_unit: '#34d399', separator: '#fb7185',
+  };
+  const surfaceStructuresFC = {
+    type: 'FeatureCollection' as const,
+    features: (state.surfaceStructures || []).map((s) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [s.lon, s.lat] },
+      properties: {
+        id: s.id, name: s.name, entityType: 'surfaceStructure', structType: s.type,
+        status: s.status, throughput: s.throughput, unit: s.unit, padId: s.padId,
+        elevationFt: s.elevationFt, surfaceTempF: s.surfaceTempF, soilType: s.soilType, landUse: s.landUse,
+        color: s.status === 'maintenance' ? '#ef4444' : (surfStructColor[s.type] || '#94a3b8'),
+      },
+    })),
+  };
+
+  // Surface gathering flowlines — pattern → CPF
+  const gatheringLinesFC = {
+    type: 'FeatureCollection' as const,
+    features: (state.gatheringLines || []).map((g) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'LineString' as const, coordinates: [g.from, g.to] },
+      properties: {
+        id: g.id, name: g.name, entityType: 'gatheringLine', product: g.product,
+        fromId: g.fromId, toId: g.toId, diameterIn: g.diameterIn, color: '#5eead4',
+      },
+    })),
+  };
+
+  // Lease boundary polygon
+  const leaseBoundaryFC = {
+    type: 'FeatureCollection' as const,
+    features: [{
+      type: 'Feature' as const,
+      geometry: { type: 'Polygon' as const, coordinates: [state.leaseBoundary || []] },
+      properties: { id: 'LEASE', name: 'Field Lease Boundary', entityType: 'leaseBoundary', color: '#facc15' },
+    }],
   };
 
   // Fleet
@@ -215,6 +262,9 @@ router.get('/geospatial/assets', async (_req, res) => {
     pipelines: pipelinesFC,
     co2Sources: co2SourcesFC,
     monitoringPoints: monitoringFC,
+    surfaceStructures: surfaceStructuresFC,
+    gatheringLines: gatheringLinesFC,
+    leaseBoundary: leaseBoundaryFC,
     fleet: fleetFC,
     flares: flaresFC,
   });

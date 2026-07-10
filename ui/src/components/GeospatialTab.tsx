@@ -25,6 +25,9 @@ interface GeoJSONAssets {
   pipelines?: GeoJSONFC;
   co2Sources?: GeoJSONFC;
   monitoringPoints?: GeoJSONFC;
+  surfaceStructures?: GeoJSONFC;
+  gatheringLines?: GeoJSONFC;
+  leaseBoundary?: GeoJSONFC;
   fleet?: GeoJSONFC;
   flares?: GeoJSONFC;
 }
@@ -44,7 +47,10 @@ const LAYERS: LayerDef[] = [
   { key: 'facilities', label: 'Facilities', color: '#3b82f6' },
   { key: 'pipelines', label: 'Pipelines', color: '#06b6d4' },
   { key: 'co2Sources', label: 'CO\u2082 Sources', color: '#a855f7' },
-  { key: 'monitoringPoints', label: 'Monitoring', color: '#f59e0b' },
+  { key: 'monitoringPoints', label: 'MRV + seismic', color: '#f59e0b' },
+  { key: 'surfaceStructures', label: 'Surface infra', color: '#38bdf8' },
+  { key: 'gatheringLines', label: 'Gathering lines', color: '#5eead4' },
+  { key: 'leaseBoundary', label: 'Lease boundary', color: '#facc15' },
   { key: 'fleet', label: 'Fleet', color: '#8b5cf6' },
   { key: 'flares', label: 'Flares', color: '#f97316' },
   { key: 'h3', label: 'H3 density', color: '#22d3ee' },
@@ -153,6 +159,40 @@ function drawMap(
   }
 
   const toXY = (lon: number, lat: number) => lonLatToPixel(lon, lat, view, w, h);
+
+  // --- Lease boundary (dashed polygon, drawn behind everything) ---
+  if (visibility.leaseBoundary && assets.leaseBoundary?.features?.length) {
+    const ring = assets.leaseBoundary.features[0]?.geometry?.coordinates?.[0] as number[][] | undefined;
+    if (ring && ring.length > 2) {
+      ctx.beginPath();
+      const [sx, sy] = toXY(ring[0][0], ring[0][1]);
+      ctx.moveTo(sx, sy);
+      for (let i = 1; i < ring.length; i++) { const [px, py] = toXY(ring[i][0], ring[i][1]); ctx.lineTo(px, py); }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.04)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.7)';
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([8, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // --- Surface gathering flowlines (pattern → CPF) ---
+  if (visibility.gatheringLines && assets.gatheringLines?.features?.length) {
+    ctx.strokeStyle = 'rgba(94, 234, 212, 0.75)';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([2, 3]);
+    for (const f of assets.gatheringLines.features) {
+      const coords = f.geometry.coordinates as number[][];
+      if (!coords || coords.length < 2) continue;
+      const [x0, y0] = toXY(coords[0][0], coords[0][1]);
+      const [x1, y1] = toXY(coords[1][0], coords[1][1]);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
 
   // --- H3 hexes (choropleth by avg oil) — real Databricks h3_boundaryasgeojson ---
   const h3fc = (assets as any).__h3 as { features: any[] } | undefined;
@@ -279,19 +319,49 @@ function drawMap(
 
   // --- Monitoring Points ---
   if (visibility.monitoringPoints && assets.monitoringPoints) {
+    const TYPE_COLOR: Record<string, string> = {
+      soil_gas: '#22c55e', groundwater: '#38bdf8', seismic: '#a855f7',
+      methane: '#fb923c', air_quality: '#fb923c', pressure: '#f59e0b', tiltmeter: '#e879f9',
+    };
     for (const f of assets.monitoringPoints.features) {
       const [lon, lat] = f.geometry.coordinates as number[];
       const [x, y] = toXY(lon, lat);
-      // Triangle marker
-      ctx.fillStyle = '#f59e0b';
-      ctx.globalAlpha = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(x, y - 5);
-      ctx.lineTo(x - 4, y + 3);
-      ctx.lineTo(x + 4, y + 3);
-      ctx.closePath();
-      ctx.fill();
+      const mt = String(f.properties.monitorType || '');
+      const col = TYPE_COLOR[mt] || '#f59e0b';
+      const st = String(f.properties.status || 'normal');
+      ctx.globalAlpha = 0.9;
+      if (mt === 'seismic') {
+        // Triangle for geophones
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.moveTo(x, y - 4.5); ctx.lineTo(x - 4, y + 3); ctx.lineTo(x + 4, y + 3); ctx.closePath(); ctx.fill();
+      } else if (mt === 'groundwater') {
+        // Square for groundwater wells
+        ctx.fillStyle = col; ctx.fillRect(x - 3.2, y - 3.2, 6.4, 6.4);
+      } else {
+        // Circle for soil-gas / methane / pressure
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 3.4, 0, Math.PI * 2); ctx.fill();
+      }
+      // Alarm/warning halo
+      if (st !== 'normal') {
+        ctx.strokeStyle = st === 'alarm' ? '#ef4444' : '#eab308';
+        ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 6.5, 0, Math.PI * 2); ctx.stroke();
+      }
       ctx.globalAlpha = 1;
+    }
+  }
+
+  // --- Surface infrastructure (tank batteries, compressors, metering, LACT) ---
+  if (visibility.surfaceStructures && assets.surfaceStructures) {
+    for (const f of assets.surfaceStructures.features) {
+      const [lon, lat] = f.geometry.coordinates as number[];
+      const [x, y] = toXY(lon, lat);
+      ctx.fillStyle = String(f.properties.color || '#38bdf8');
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1;
+      // Diamond marker for surface structures
+      ctx.beginPath();
+      ctx.moveTo(x, y - 5); ctx.lineTo(x + 5, y); ctx.lineTo(x, y + 5); ctx.lineTo(x - 5, y);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
     }
   }
 
@@ -449,6 +519,7 @@ function hitTest(
     { key: 'facilities', type: 'facility', radius: 16 },
     { key: 'co2Sources', type: 'source', radius: 12 },
     { key: 'monitoringPoints', type: 'monitor', radius: 8 },
+    { key: 'surfaceStructures', type: 'surface', radius: 8 },
     { key: 'fleet', type: 'fleet', radius: 10 },
     { key: 'flares', type: 'flare', radius: 10 },
   ];

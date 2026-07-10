@@ -2,6 +2,7 @@ import {
   TwinState, Well, InjectionPattern, Pad, Facility, Pipeline,
   CO2Source, MonitoringPoint, FlarePoint, FleetAsset, Alert,
   ShiftLog, AgentState, ProductionKPI, EconomicsKPI, EnvironmentalKPI,
+  SurfaceStructure, GatheringLine,
 } from '../twin/types';
 
 // ------------------------------------------------------------------
@@ -317,17 +318,114 @@ function createCO2Sources(): CO2Source[] {
 // ------------------------------------------------------------------
 // Monitoring Points
 // ------------------------------------------------------------------
+// Deterministic surface-context attributes so points carry richer detail on click.
+const SOILS = ['Sandy loam', 'Caliche', 'Clay loam', 'Silty sand', 'Gypsum-rich'];
+const LANDUSE = ['Rangeland', 'Oilfield pad', 'Ranch access', 'Desert scrub', 'Grazing lease'];
+function surf(seed: number, baseElev = 3050) {
+  return {
+    elevationFt: Math.round(baseElev + ((seed * 37) % 260) - 130),
+    surfaceTempF: Math.round(74 + ((seed * 13) % 16)),
+    soilType: SOILS[seed % SOILS.length],
+    landUse: LANDUSE[(seed * 3) % LANDUSE.length],
+  };
+}
+// Point on a ring of radius `r` miles around (lat,lon) at angle index i/n.
+function ring(lat: number, lon: number, r: number, i: number, n: number): { lat: number; lon: number } {
+  const a = (i / n) * 2 * Math.PI;
+  return { lat: lat + dLat(r * Math.cos(a)), lon: lon + dLon(r * Math.sin(a)) };
+}
+
+const PATTERN_SITES = [
+  { id: 'PAT-A', name: 'Pattern A', lat: BASE_LAT + dLat(1),  lon: BASE_LON + dLon(0),   inj: { lat: BASE_LAT + dLat(1), lon: BASE_LON + dLon(0) } },
+  { id: 'PAT-B', name: 'Pattern B', lat: BASE_LAT + dLat(1),  lon: BASE_LON + dLon(2),   inj: { lat: BASE_LAT + dLat(1), lon: BASE_LON + dLon(2) } },
+  { id: 'PAT-C', name: 'Pattern C', lat: BASE_LAT - dLat(1),  lon: BASE_LON - dLon(0.5), inj: { lat: BASE_LAT - dLat(1), lon: BASE_LON - dLon(0.5) } },
+  { id: 'PAT-D', name: 'Pattern D', lat: BASE_LAT - dLat(1),  lon: BASE_LON + dLon(1.5), inj: { lat: BASE_LAT - dLat(1), lon: BASE_LON + dLon(1.5) } },
+];
+
 function createMonitoringPoints(): MonitoringPoint[] {
-  return [
-    { id: 'MON-S01', name: 'Seismic Array North', type: 'seismic', lat: BASE_LAT + dLat(1.5), lon: BASE_LON, value: 0.12, unit: 'Richter', threshold: 2.0, status: 'normal' },
-    { id: 'MON-S02', name: 'Seismic Array South', type: 'seismic', lat: BASE_LAT - dLat(1.5), lon: BASE_LON, value: 0.08, unit: 'Richter', threshold: 2.0, status: 'normal' },
-    { id: 'MON-P01', name: 'Pressure Gauge Pattern A', type: 'pressure', lat: BASE_LAT + dLat(1), lon: BASE_LON + dLon(0.1), value: 2950, unit: 'psi', threshold: 3500, status: 'normal' },
-    { id: 'MON-P02', name: 'Pressure Gauge Pattern D', type: 'pressure', lat: BASE_LAT - dLat(1), lon: BASE_LON + dLon(1.6), value: 3380, unit: 'psi', threshold: 3500, status: 'warning' },
-    { id: 'MON-G01', name: 'Soil Gas Sensor NE', type: 'soil_gas', lat: BASE_LAT + dLat(0.5), lon: BASE_LON + dLon(1.5), value: 120, unit: 'ppm CO2', threshold: 500, status: 'normal' },
-    { id: 'MON-G02', name: 'Soil Gas Sensor SW', type: 'soil_gas', lat: BASE_LAT - dLat(0.5), lon: BASE_LON - dLon(1), value: 85, unit: 'ppm CO2', threshold: 500, status: 'normal' },
-    { id: 'MON-W01', name: 'Groundwater Monitor Alpha', type: 'groundwater', lat: BASE_LAT + dLat(2), lon: BASE_LON + dLon(0.5), value: 350, unit: 'ppm TDS', threshold: 1000, status: 'normal' },
-    { id: 'MON-W02', name: 'Groundwater Monitor Beta', type: 'groundwater', lat: BASE_LAT - dLat(2), lon: BASE_LON - dLon(0.5), value: 410, unit: 'ppm TDS', threshold: 1000, status: 'normal' },
+  const pts: MonitoringPoint[] = [
+    // Field-scale pressure gauges (kept from the original set)
+    { id: 'MON-P01', name: 'Reservoir Pressure — Pattern A', type: 'pressure', patternId: 'PAT-A', lat: BASE_LAT + dLat(1), lon: BASE_LON + dLon(0.1), value: 2950, unit: 'psi', threshold: 3500, status: 'normal', ...surf(1) },
+    { id: 'MON-P02', name: 'Reservoir Pressure — Pattern D', type: 'pressure', patternId: 'PAT-D', lat: BASE_LAT - dLat(1), lon: BASE_LON + dLon(1.6), value: 3380, unit: 'psi', threshold: 3500, status: 'warning', ...surf(2) },
   ];
+  let s = 10;
+  PATTERN_SITES.forEach((p, pi) => {
+    const hot = p.id === 'PAT-D';   // Pattern D runs a touch hotter for the demo
+    // Soil-gas CO2 flux stations — 3 in a ring (MRV surface leakage monitoring)
+    for (let i = 0; i < 3; i++) {
+      const r = ring(p.lat, p.lon, 0.45, i, 3); s++;
+      const v = 60 + ((s * 17) % 90) + (hot ? 140 : 0);
+      pts.push({ id: `MON-SG-${p.id}-${i + 1}`, name: `Soil-Gas Flux ${p.name} #${i + 1}`, type: 'soil_gas', patternId: p.id,
+        lat: r.lat, lon: r.lon, value: v, unit: 'ppm CO₂', threshold: 500, status: v > 400 ? 'warning' : 'normal', ...surf(s) });
+    }
+    // Groundwater (USDW) monitoring wells — 2 per pattern
+    for (let i = 0; i < 2; i++) {
+      const r = ring(p.lat, p.lon, 0.7, i, 2); s++;
+      const v = 300 + ((s * 29) % 260);
+      pts.push({ id: `MON-GW-${p.id}-${i + 1}`, name: `Groundwater Monitor ${p.name} #${i + 1}`, type: 'groundwater', patternId: p.id,
+        lat: r.lat, lon: r.lon, value: v, unit: 'ppm TDS', threshold: 1000, status: 'normal', ...surf(s, 3020) });
+    }
+    // Methane / air-quality sensors — 2 per pattern (LDAR / emissions)
+    for (let i = 0; i < 2; i++) {
+      const r = ring(p.lat, p.lon, 0.35, i + 1, 4); s++;
+      const v = 1.9 + (((s * 7) % 30) / 10) + (hot ? 3 : 0);
+      pts.push({ id: `MON-CH4-${p.id}-${i + 1}`, name: `Methane / AQ Sensor ${p.name} #${i + 1}`, type: 'methane', patternId: p.id,
+        lat: r.lat, lon: r.lon, value: Math.round(v * 10) / 10, unit: 'ppm CH₄', threshold: 5, status: v > 5 ? 'alarm' : v > 3.5 ? 'warning' : 'normal', ...surf(s) });
+    }
+    // Microseismic geophone array — 4 ringing the injector (induced-seismicity)
+    for (let i = 0; i < 4; i++) {
+      const r = ring(p.inj.lat, p.inj.lon, 0.3, i, 4); s++;
+      const v = Math.round((0.2 + ((s * 11) % 90) / 100 + (hot ? 0.4 : 0)) * 100) / 100;
+      pts.push({ id: `MON-MS-${p.id}-${i + 1}`, name: `Geophone ${p.name} G${i + 1}`, type: 'seismic', patternId: p.id,
+        lat: r.lat, lon: r.lon, value: v, unit: 'M (local)', threshold: 2.0, status: v > 1.5 ? 'warning' : 'normal', ...surf(s) });
+    }
+    void pi;
+  });
+  return pts;
+}
+
+// ------------------------------------------------------------------
+// Surface infrastructure — tank batteries, compressors, metering, LACT
+// ------------------------------------------------------------------
+function createSurfaceStructures(): SurfaceStructure[] {
+  const out: SurfaceStructure[] = [];
+  let s = 100;
+  PATTERN_SITES.forEach((p) => {
+    s++; const tb = ring(p.lat, p.lon, 0.25, 0, 1);
+    out.push({ id: `SUR-TB-${p.id}`, name: `Tank Battery ${p.name}`, type: 'tank_battery', status: 'online',
+      lat: tb.lat, lon: tb.lon, throughput: 900 + ((s * 31) % 700), unit: 'bbl/d', padId: p.id, ...surf(s) });
+    s++; const sk = ring(p.lat, p.lon, 0.25, 2, 4);
+    out.push({ id: `SUR-MS-${p.id}`, name: `Metering Skid ${p.name}`, type: 'metering_skid', status: 'online',
+      lat: sk.lat, lon: sk.lon, throughput: 1200 + ((s * 23) % 900), unit: 'mcf/d', padId: p.id, ...surf(s) });
+    s++; const sep = ring(p.lat, p.lon, 0.18, 1, 4);
+    out.push({ id: `SUR-SEP-${p.id}`, name: `Test Separator ${p.name}`, type: 'separator', status: 'online',
+      lat: sep.lat, lon: sep.lon, throughput: 600 + ((s * 19) % 500), unit: 'bbl/d', padId: p.id, ...surf(s) });
+  });
+  // Field compressors near CPF + compression station
+  out.push({ id: 'SUR-COMP-1', name: 'Field Compressor A', type: 'compressor', status: 'online', lat: BASE_LAT + dLat(0.5), lon: BASE_LON + dLon(0.75), throughput: 8200, unit: 'mcf/d', ...surf(140) });
+  out.push({ id: 'SUR-COMP-2', name: 'Field Compressor B', type: 'compressor', status: 'standby', lat: BASE_LAT + dLat(0.45), lon: BASE_LON + dLon(0.85), throughput: 0, unit: 'mcf/d', ...surf(141) });
+  out.push({ id: 'SUR-LACT', name: 'LACT Custody Unit', type: 'lact_unit', status: 'online', lat: BASE_LAT, lon: BASE_LON + dLon(0.55), throughput: 3190, unit: 'bbl/d', ...surf(142) });
+  return out;
+}
+
+// ------------------------------------------------------------------
+// Surface gathering flowlines — pattern → CPF
+// ------------------------------------------------------------------
+function createGatheringLines(): GatheringLine[] {
+  const cpf: [number, number] = [BASE_LON + dLon(0.5), BASE_LAT];
+  return PATTERN_SITES.map((p) => ({
+    id: `GL-${p.id}`, name: `${p.name} Gathering Flowline`, product: 'mixed' as const,
+    fromId: p.id, toId: 'FAC-CPF', from: [p.lon, p.lat] as [number, number], to: cpf, diameterIn: 6,
+  }));
+}
+
+// ------------------------------------------------------------------
+// Lease boundary — polygon enclosing the field
+// ------------------------------------------------------------------
+function createLeaseBoundary(): [number, number][] {
+  const n = BASE_LAT + dLat(2.4), s = BASE_LAT - dLat(2.4);
+  const w = BASE_LON - dLon(1.6), e = BASE_LON + dLon(3.4);
+  return [[w, s], [w, n], [e, n], [e, s], [w, s]];
 }
 
 // ------------------------------------------------------------------
@@ -587,6 +685,9 @@ export function createMockState(): TwinState {
     pipelines: createPipelines(),
     co2Sources: createCO2Sources(),
     monitoringPoints: createMonitoringPoints(),
+    surfaceStructures: createSurfaceStructures(),
+    gatheringLines: createGatheringLines(),
+    leaseBoundary: createLeaseBoundary(),
     flares,
     fleet: createFleet(),
     alerts: createAlerts(),

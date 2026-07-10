@@ -34,9 +34,13 @@ const TABLE = `${SCHEMA}.well_locations`;
 const CPF = { lon: -103.5 + 0.5 * 0.09, lat: 31.9 };
 
 let seeded = false;
+// Single-flight guard: the four spatial endpoints call ensureSeeded() concurrently
+// on first load. Without this they each run CREATE/DELETE/INSERT on well_locations
+// at once, so one endpoint can query mid-DELETE and get 0 rows (empty H3 / 0 spacing).
+// Share one seeding promise so every caller awaits the same completed seed.
+let seedPromise: Promise<void> | null = null;
 
-async function ensureSeeded(): Promise<void> {
-  if (seeded) return;
+async function doSeed(): Promise<void> {
   const state = await provider.loadState();
   const rows = state.wells
     .filter((w) => Number.isFinite(w.lat) && Number.isFinite(w.lon))
@@ -59,6 +63,14 @@ async function ensureSeeded(): Promise<void> {
     }
   }
   seeded = true;
+}
+
+async function ensureSeeded(): Promise<void> {
+  if (seeded) return;
+  if (!seedPromise) {
+    seedPromise = doSeed().catch((e) => { seedPromise = null; throw e; });
+  }
+  return seedPromise;
 }
 
 // Apache lease area of interest, a rectangle around the Apache pads (WKT polygon).
